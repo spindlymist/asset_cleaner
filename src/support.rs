@@ -9,7 +9,7 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
 {
     use sdl2::event::{Event, WindowEvent};
     
-    let ImguiState { mut platform, mut renderer, mut context, .. } = imgui;
+    let ImguiState { mut platform, mut renderer, context: mut im_context, .. } = imgui;
     let event_pump = &mut platform.event_pump;
     let window = &mut platform.window;
     let im_platform = platform.im_platform.as_mut().expect("Platform should be initialized");
@@ -17,32 +17,34 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
     
     'main_loop: loop {
         // Process events
-        let events = [event_pump.wait_event()]
-            .into_iter()
-            .chain(event_pump.poll_iter());
-        for event in events {
-            im_platform.handle_event(&mut context, &event);
-            match event {
-                Event::Window { window_id, win_event: WindowEvent::SizeChanged(width, height), .. }
-                    if window_id == window.id()
-                => {
-                    renderer.surface_config.width = width as u32;
-                    renderer.surface_config.height = height as u32;
-                    renderer.surface.configure(&renderer.device, &renderer.surface_config);
+        if let Some(first_event) = event_pump.wait_event_timeout(33) {
+            let events = [first_event]
+                .into_iter()
+                .chain(event_pump.poll_iter());
+            for event in events {
+                im_platform.handle_event(&mut im_context, &event);
+                match event {
+                    Event::Window { window_id, win_event: WindowEvent::SizeChanged(width, height), .. }
+                        if window_id == window.id()
+                    => {
+                        renderer.surface_config.width = width as u32;
+                        renderer.surface_config.height = height as u32;
+                        renderer.surface.configure(&renderer.device, &renderer.surface_config);
+                    }
+                    Event::Window { window_id, win_event: WindowEvent::Exposed, .. }
+                        if window_id == window.id()
+                    => {
+                        renderer.surface.configure(&renderer.device, &renderer.surface_config);
+                    }
+                    Event::Quit { .. } => break 'main_loop,
+                    _ => {},
                 }
-                Event::Window { window_id, win_event: WindowEvent::Exposed, .. }
-                    if window_id == window.id()
-                => {
-                    renderer.surface.configure(&renderer.device, &renderer.surface_config);
-                }
-                Event::Quit { .. } => break 'main_loop,
-                _ => {},
             }
         }
         
         // Prepare for new frame
-        im_platform.prepare_frame(&mut context, &window, &event_pump);
-        let ui = context.new_frame();
+        im_platform.prepare_frame(&mut im_context, &window, &event_pump);
+        let ui = im_context.new_frame();
         
         // Build UI
         {
@@ -55,7 +57,7 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
         }
         
         // Prepare to render
-        let draw_data = context.render();
+        let draw_data = im_context.render();
         let frame = match renderer.surface.get_current_texture() {
             Ok(frame) => frame,
             Err(err) => {
