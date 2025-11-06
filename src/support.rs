@@ -59,7 +59,7 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
         }
         
         // Prepare for new frame
-        im_platform.prepare_frame(&mut im_context, &window, &event_pump);
+        im_platform.prepare_frame(&mut im_context, window, event_pump);
         let ui = im_context.new_frame();
         
         // Build UI
@@ -289,8 +289,8 @@ impl<'a> Textures<'a> {
             format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
             ..Default::default()
         };
-        let texture = imgui_wgpu::Texture::new(&self.device, &self.renderer, texture_config);
-        texture.write(&self.queue, raw_bytes, width, height);
+        let texture = imgui_wgpu::Texture::new(self.device, self.renderer, texture_config);
+        texture.write(self.queue, raw_bytes, width, height);
         let texture_id = self.renderer.textures.insert(texture);
         
         Ok(Image {

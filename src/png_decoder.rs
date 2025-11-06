@@ -137,16 +137,16 @@ impl<R: BufRead + Seek> PngDecoder<R> {
             .map(|x| f64::from(x.into_scaled()) / 100_000.0))
     }
 
-    /// Turn this into an iterator over the animation frames.
-    ///
-    /// Reading the complete animation requires more memory than reading the data from the IDAT
-    /// frame–multiple frame buffers need to be reserved at the same time. We further do not
-    /// support compositing 16-bit colors. In any case this would be lossy as the interface of
-    /// animation decoders does not support 16-bit colors.
-    ///
-    /// If something is not supported or a limit is violated then the decoding step that requires
-    /// them will fail and an error will be returned instead of the frame. No further frames will
-    /// be returned.
+    // Turn this into an iterator over the animation frames.
+    //
+    // Reading the complete animation requires more memory than reading the data from the IDAT
+    // frame–multiple frame buffers need to be reserved at the same time. We further do not
+    // support compositing 16-bit colors. In any case this would be lossy as the interface of
+    // animation decoders does not support 16-bit colors.
+    //
+    // If something is not supported or a limit is violated then the decoding step that requires
+    // them will fail and an error will be returned instead of the frame. No further frames will
+    // be returned.
     // pub fn apng(self) -> ImageResult<ApngDecoder<R>> {
     //     Ok(ApngDecoder::new(self))
     // }

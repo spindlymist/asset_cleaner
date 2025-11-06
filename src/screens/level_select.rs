@@ -13,9 +13,9 @@ pub struct State {
 
 impl State {
     pub fn new(worlds: &Path) -> Self {
-        let (levels, error) = match list_levels(&worlds) {
+        let (levels, error) = match list_levels(worlds) {
             Ok(levels) => (levels, None),
-            Err(err) => (Vec::new(), Some(err.into())),
+            Err(err) => (Vec::new(), Some(err)),
         };
         
         Self {
@@ -62,12 +62,12 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     let list_items: Vec<_> = filter_levels(&state.levels, &state.filter.to_lowercase());
     open_level |= list_box(ui, "##Level list", &mut state.selected_level_index, &list_items, [-1.0, -1.0]);
     
-    if open_level {
-        if let Some(index) = state.selected_level_index {
-            let level = list_items[index];
-            let path = shared.worlds_path.join(&level.name);
-            return Task::OpenLevel(path);
-        }
+    if open_level
+        && let Some(index) = state.selected_level_index
+    {
+        let level = list_items[index];
+        let path = shared.worlds_path.join(&level.name);
+        return Task::OpenLevel(path);
     }
     
     Task::None
@@ -101,7 +101,7 @@ fn list_levels(path: &Path) -> anyhow::Result<Vec<LevelListItem>> {
     Ok(levels)
 }
 
-fn filter_levels<'a, 'b>(levels: &'a Vec<LevelListItem>, filter: &'b str) -> Vec<&'a LevelListItem> {
+fn filter_levels<'a>(levels: &'a[LevelListItem], filter: &str) -> Vec<&'a LevelListItem> {
     levels.iter()
         .by_ref()
         .filter(|level| level.search_name.contains(filter))

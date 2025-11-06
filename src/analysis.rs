@@ -1,4 +1,4 @@
-use std::{cell::LazyCell, collections::{HashMap, HashSet}, ops::RangeBounds, path::{Path, PathBuf}, str::FromStr, sync::mpsc};
+use std::{collections::{HashMap, HashSet}, ops::RangeBounds, path::{Path, PathBuf}, str::FromStr, sync::mpsc};
 
 use anyhow::{Context, Result};
 use walkdir::WalkDir;
@@ -107,7 +107,7 @@ pub fn list_unused_assets(tx: mpsc::Sender<AnalysisStatus>, world_path: PathBuf)
 fn is_range_with_affixes<B, T>(s: &str, prefix: &str, suffix: &str, range: B) -> bool
 where
     B: RangeBounds<T>,
-    T: FromStr + PartialOrd<T> + ?Sized,
+    T: FromStr + PartialOrd<T>,
 {
     let Some(affixed) = s.strip_suffix(suffix)
         .and_then(|s| s.strip_prefix(prefix))
@@ -521,7 +521,7 @@ fn simplify_path(rel_path: PathBuf, base: &Path) -> Option<PathBuf> {
         let full_path = base.join(rel_path);
         let abs_path = std::path::absolute(full_path)
             .expect("Path should not be empty or relative");
-        match abs_path.strip_prefix(&base) {
+        match abs_path.strip_prefix(base) {
             Ok(rel_path) => Some(rel_path.to_owned()),
             Err(_) => None,
         }

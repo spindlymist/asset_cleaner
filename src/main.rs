@@ -11,10 +11,10 @@ mod screens {
 mod imgui_ext;
 mod png_decoder;
 
-use std::{error::Error, path::{Path, PathBuf}};
+use std::path::PathBuf;
 
 use anyhow::Result;
-use imgui::{Condition, StyleColor, StyleVar, Ui};
+use imgui::{Condition, StyleVar, Ui};
 use sdl2::video::Window;
 
 use support::{platform_init, imgui_init, renderer_init, run, Textures};
@@ -130,5 +130,5 @@ fn try_find_ks() -> Result<Option<PathBuf>> {
         }
     }
     
-    return Ok(Some(maybe_ks_dir.to_owned()));
+    Ok(Some(maybe_ks_dir.to_owned()))
 }

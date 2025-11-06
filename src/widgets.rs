@@ -37,7 +37,7 @@ where
             }
         });
     
-    return double_click;
+    double_click
 }
 
 
@@ -94,7 +94,7 @@ where
             }
         });
     
-    return double_click;
+    double_click
 }
 
 pub trait ChecklistItem {
