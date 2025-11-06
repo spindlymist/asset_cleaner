@@ -283,6 +283,12 @@ impl<'a> Textures<'a> {
             height: height as f32,
         })
     }
+    
+    pub fn delete_texture(&mut self, texture_id: imgui::TextureId) {
+        // imgui_wgpu::Texture has a pointer to the underlying wgpu::Texture.
+        // When wgpu::Texture is dropped, the texture is automatically destroyed.
+        self.renderer.textures.remove(texture_id);
+    }
 }
 
 pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<image::RgbaImage> {

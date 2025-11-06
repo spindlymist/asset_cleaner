@@ -218,6 +218,15 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
         ui.move_cursor_right(width_avail - width_item);
         
         if ui.button("Go Back") {
+            for image in state.tilesets.iter_mut()
+                .chain(state.gradients.iter_mut())
+                .chain(state.custom_objects.iter_mut())
+                .chain(state.cutscenes.iter_mut())
+                .chain(state.misc.iter_mut())
+                .filter_map(|asset| asset.image.take())
+            {
+                textures.delete_texture(image.texture_id);
+            }
             return Task::SelectLevel;
         }
         ui.set_cursor_pos(cursor_pos);
