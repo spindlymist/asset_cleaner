@@ -14,7 +14,7 @@ mod png_decoder;
 use std::{error::Error, path::{Path, PathBuf}};
 
 use anyhow::Result;
-use imgui::{Condition, StyleVar, Ui};
+use imgui::{Condition, StyleColor, StyleVar, Ui};
 use sdl2::video::Window;
 
 use support::{platform_init, imgui_init, renderer_init, run, Textures};
@@ -76,9 +76,9 @@ fn app_init() -> Result<App> {
 
 fn build_ui(app: &mut App, ui: &Ui, window: &Window, textures: &mut Textures) {
     let (width, height) = window.size();
-    let style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+    let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+    
     let mut task = Task::None;
-
     ui.window("Main")
         .position([0.0, 0.0], Condition::Always)
         .size([width as f32, height as f32], Condition::Always)
@@ -98,8 +98,6 @@ fn build_ui(app: &mut App, ui: &Ui, window: &Window, textures: &mut Textures) {
                 }
             }
         });
-
-    style_window_padding.end();
     
     match task {
         Task::SelectLevel => {

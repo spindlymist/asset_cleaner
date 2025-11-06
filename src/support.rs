@@ -15,6 +15,9 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
     let im_platform = platform.im_platform.as_mut().expect("Platform should be initialized");
     let im_renderer = renderer.im_renderer.as_mut().expect("Renderer should be initialized");
     
+    // ui.push_style_color() doesn't work
+    im_context.style_mut().colors[imgui::StyleColor::ModalWindowDimBg as usize] = [0.0, 0.0, 0.0, 0.95];
+    
     'main_loop: loop {
         // Process events
         if let Some(first_event) = event_pump.wait_event_timeout(33) {

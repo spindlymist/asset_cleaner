@@ -311,28 +311,34 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         if ui.button(format!("Delete checked ({})", n_checked)) {
             ui.open_popup(tab.modal_id_multiple());
         }
-        
-        if let Some(_popup) = ui.begin_modal_popup(tab.modal_id_multiple()) {
-            ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
-            
-            if ui.button("Yes, destroy them all!") {
-                assets.retain(|item| {
-                    if item.selected {
-                        trash::delete(&item.abs_path).is_err()
-                    }
-                    else {
-                        true
-                    }
-                });
-                state.selected_index = None;
-                ui.close_current_popup();
-            }
-            
-            ui.same_line();
-            if ui.button("No, don't do it!") {
-                ui.close_current_popup()
-            }
-        }
+
+        let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+        ui.modal_popup_config(tab.modal_id_multiple())
+            .movable(false)
+            .resizable(false)
+            .always_auto_resize(true)
+            .build(|| {
+                ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
+                
+                if ui.button("Yes, destroy them all!") {
+                    assets.retain(|item| {
+                        if item.selected {
+                            trash::delete(&item.abs_path).is_err()
+                        }
+                        else {
+                            true
+                        }
+                    });
+                    state.selected_index = None;
+                    ui.close_current_popup();
+                }
+                
+                ui.same_line();
+                if ui.button("No, don't do it!") {
+                    ui.close_current_popup()
+                }
+            });
+        modal_padding.end();
     }
     
     checklist_box(ui, tab.checklist_id(), &mut state.selected_index, assets, [checklist_width, -1.0]);
@@ -362,26 +368,32 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                     ui.open_popup(tab.modal_id_single());
                 }
                 
-                if let Some(_popup) = ui.begin_modal_popup(tab.modal_id_single()) {
-                    ui.text(format!("Are you sure you want to delete {:?}?", assets[i].abs_path));
-                    
-                    if ui.button("Yes, destroy it!") {
-                        if trash::delete(&assets[i].abs_path).is_ok() {
-                            assets.remove(state.selected_index.unwrap());
-                            state.selected_index = None;
-                            ui.close_current_popup();
-                            return;
+                let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+                ui.modal_popup_config(tab.modal_id_single())
+                    .movable(false)
+                    .resizable(false)
+                    .always_auto_resize(true)
+                    .build(|| {
+                        ui.text(format!("Are you sure you want to delete {:?}?", assets[i].abs_path));
+                        
+                        if ui.button("Yes, destroy it!") {
+                            if trash::delete(&assets[i].abs_path).is_ok() {
+                                assets.remove(state.selected_index.unwrap());
+                                state.selected_index = None;
+                                ui.close_current_popup();
+                                return;
+                            }
+                            else {
+                                ui.close_current_popup();
+                            }
                         }
-                        else {
-                            ui.close_current_popup();
+                        
+                        ui.same_line();
+                        if ui.button("No, don't do it!") {
+                            ui.close_current_popup()
                         }
-                    }
-                    
-                    ui.same_line();
-                    if ui.button("No, don't do it!") {
-                        ui.close_current_popup()
-                    }
-                }
+                    });
+                modal_padding.end();
                 
                 let item = &mut assets[i];
                 match item.kind {
