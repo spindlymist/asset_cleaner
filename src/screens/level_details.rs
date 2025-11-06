@@ -118,7 +118,8 @@ pub enum Tab {
 
 pub struct AssetListItem {
     pub abs_path: PathBuf,
-    pub file_name: String,
+    pub rel_path: PathBuf,
+    pub display_name: String,
     pub image: Option<Image>,
     pub selected: bool,
     pub kind: AssetKind,
@@ -134,7 +135,7 @@ pub enum AssetKind {
 
 impl ChecklistItem for AssetListItem {
     fn label_and_checked(&mut self) -> (&str, &mut bool) {
-        (&self.file_name, &mut self.selected)
+        (&self.display_name, &mut self.selected)
     }
 }
 
@@ -164,8 +165,9 @@ impl AssetListItem {
             };
         
         Self {
-            file_name,
-            abs_path: level_dir.join(rel_path),
+            abs_path: level_dir.join(&rel_path),
+            rel_path,
+            display_name: file_name,
             image: None,
             selected: false,
             kind,
@@ -374,7 +376,8 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                     .resizable(false)
                     .always_auto_resize(true)
                     .build(|| {
-                        ui.text(format!("Are you sure you want to delete {:?}?", assets[i].abs_path));
+                        let rel_path = assets[i].rel_path.to_string_lossy();
+                        ui.text(format!("Are you sure you want to delete {rel_path}?"));
                         
                         if ui.button("Yes, destroy it!") {
                             if trash::delete(&assets[i].abs_path).is_ok() {
@@ -526,5 +529,5 @@ impl Tab {
 }
 
 pub fn compare_list_items(a: &AssetListItem, b: &AssetListItem) -> std::cmp::Ordering {
-    natord::compare(&a.file_name, &b.file_name)
+    natord::compare(&a.display_name, &b.display_name)
 }
