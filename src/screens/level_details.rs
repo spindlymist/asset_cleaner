@@ -1,7 +1,7 @@
-use std::{fs::File, path::{Path, PathBuf}};
+use std::{fs::File, path::{Path, PathBuf}, time::Duration};
 
-use imgui::{StyleColor, StyleVar, Ui, WindowFlags};
-use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, streaming::{StreamingSoundData, StreamingSoundHandle}}};
+use imgui::{MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
+use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 
 use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box}};
 
@@ -28,6 +28,22 @@ pub struct AudioState {
     pub audio_manager: AudioManager,
     pub playing_index: Option<usize>,
     pub playing_handle: Option<StreamingSoundHandle<FromFileError>>,
+    pub duration: f64,
+}
+
+impl AudioState {
+    fn stop(&mut self, tween: Tween) {
+        if let Some(mut handle) = self.playing_handle.take() {
+            handle.stop(tween);
+            self.playing_index = None;
+        }
+    }
+    
+    fn is_playing(&self) -> bool {
+        self.playing_handle
+            .as_ref()
+            .is_some_and(|handle| handle.state() == PlaybackState::Playing)
+    }
 }
 
 impl State {
@@ -76,6 +92,7 @@ impl State {
             audio_manager,
             playing_index: None,
             playing_handle: None,
+            duration: 0.0,
         };
         
         let level_icon = textures.create_texture_from_file(&level_dir.join("Icon.png"))
@@ -187,6 +204,7 @@ static FADE_OUT_FAST: Tween = Tween {
 };
 
 pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures) -> Task {
+    // Level icon
     if let Some(image) = state.level_icon.as_ref() {
         let mut cursor_pos = ui.cursor_pos();
         let [text_width, text_height] = ui.calc_text_size(&state.level_name);
@@ -210,6 +228,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
         ui.set_cursor_pos(cursor_pos);
     }
     
+    // Back button
     {
         let _padding = ui.push_style_var(StyleVar::FramePadding([0.0, 0.0]));
         let _button_color = ui.push_style_color(StyleColor::Button, [0.0, 0.0, 0.0, 0.0]);
@@ -234,10 +253,11 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
         ui.set_cursor_pos(cursor_pos);
     }
     
+    // Level title
     ui.text_centered(&state.level_name);
     
+    // Tabs
     let Some(_tab_bar) = ui.tab_bar("##Tabs") else { return Task::None };
-    
     if let Some(_tab_item) = ui.tab_item(format!("Tilesets ({})", state.tilesets.len())) {
         build_tab(ui, state, textures, Tab::Tilesets);
     }
@@ -271,10 +291,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
 
 fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     if tab != state.prev_tab {
-        if let Some(mut handle) = state.audio.playing_handle.take() {
-            handle.stop(FADE_OUT_SLOW);
-        }
-        state.audio.playing_index = None;
+        state.audio.stop(FADE_OUT_SLOW);
         state.prev_tab = tab;
     }
     
@@ -436,27 +453,50 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
 fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state: &mut AudioState) {    
     let size = [168.0, 48.0];
     let is_playing =
-            audio_state.playing_index == Some(index)
-            && audio_state.playing_handle.as_ref().is_some_and(|handle| {
-                matches!(handle.state(), kira::sound::PlaybackState::Playing)
-            });
-    let mut stop_currently_playing = || {
-        if let Some(mut handle) = audio_state.playing_handle.take() {
-            handle.stop(FADE_OUT_FAST);
-            audio_state.playing_index = None;
-        }
-    };
+        audio_state.playing_index == Some(index)
+        && audio_state.is_playing();
     
     if is_playing {
+        let t = audio_state.playing_handle
+            .as_ref()
+            .map(|handle| handle.position() / audio_state.duration)
+            .unwrap_or(1.0) as f32;
+        
+        let top_left = ui.cursor_screen_pos();
+        let button_bottom_right = [top_left[0] + size[0], top_left[1] + size[1]];
+        let progress_bottom_right = [top_left[0] + t * size[0], top_left[1] + size[1]];
+        
+        let is_button_hovered = ui.is_mouse_hovering_rect(top_left, button_bottom_right);
+        let is_button_active = is_button_hovered && ui.is_mouse_down(MouseButton::Left);
+        
+        let style_color = 
+            if is_button_active {
+                StyleColor::ButtonActive
+            }
+            else if is_button_hovered {
+                StyleColor::ButtonHovered
+            }
+            else {
+                StyleColor::Button
+            };
+        let color_progress = ui.style_color(style_color);
+        let color_button = [color_progress[0], color_progress[1], color_progress[2], color_progress[3] * 0.5];
+            
+        ui.get_window_draw_list()
+            .add_rect(top_left, progress_bottom_right, color_progress)
+            .filled(true)
+            .build();
+        
+        let _token = ui.push_style_color(style_color, color_button);
         if ui.button_with_size("Stop", size) {
-            stop_currently_playing();
+            audio_state.stop(FADE_OUT_FAST);
         }
     }
     else {
         if ui.button_with_size("Play", size) {
-            stop_currently_playing();
-            if let Ok(data) = StreamingSoundData::from_file(&item.abs_path)
-            {
+            audio_state.stop(FADE_OUT_FAST);
+            if let Ok(data) = StreamingSoundData::from_file(&item.abs_path) {
+                audio_state.duration = data.duration().as_secs_f64();
                 if let Ok(handle) = audio_state.audio_manager.play(data) {
                     audio_state.playing_handle = Some(handle);
                     audio_state.playing_index = Some(index);
