@@ -418,24 +418,31 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
     }
 }
 
-fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state: &mut AudioState) {
+fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state: &mut AudioState) {    
     let size = [168.0, 48.0];
-    if audio_state.playing_index == Some(index) {
-        if ui.button_with_size("Stop", size) {
-            if let Some(mut handle) = audio_state.playing_handle.take() {
-                handle.stop(FADE_OUT_FAST);
-            }
+    let is_playing =
+            audio_state.playing_index == Some(index)
+            && audio_state.playing_handle.as_ref().is_some_and(|handle| {
+                matches!(handle.state(), kira::sound::PlaybackState::Playing)
+            });
+    let mut stop_currently_playing = || {
+        if let Some(mut handle) = audio_state.playing_handle.take() {
+            handle.stop(FADE_OUT_FAST);
             audio_state.playing_index = None;
+        }
+    };
+    
+    if is_playing {
+        if ui.button_with_size("Stop", size) {
+            stop_currently_playing();
         }
     }
     else {
         if ui.button_with_size("Play", size) {
-            if let Some(mut handle) = audio_state.playing_handle.take() {
-                handle.stop(FADE_OUT_FAST);
-            }
-            
-            if let Ok(handle) = StreamingSoundData::from_file(&item.abs_path) {
-                if let Ok(handle) = audio_state.audio_manager.play(handle) {
+            stop_currently_playing();
+            if let Ok(data) = StreamingSoundData::from_file(&item.abs_path)
+            {
+                if let Ok(handle) = audio_state.audio_manager.play(data) {
                     audio_state.playing_handle = Some(handle);
                     audio_state.playing_index = Some(index);
                 }
