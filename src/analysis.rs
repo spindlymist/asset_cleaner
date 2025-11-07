@@ -136,29 +136,32 @@ fn sort_assets(assets: HashMap<PathBuf, PathBuf>, ignored: Vec<PathBuf>) -> Unus
         let parts: Vec<_> = key.iter()
             .map(|part| part.to_str())
             .collect();
+        let file_name = parts.last()
+            .expect("Path should have at least one part")
+            .unwrap_or("");
         
         if parts.len() == 2
             && parts[0] == Some("tilesets")
-            && is_range_with_affixes(parts[1].unwrap_or(""), "tileset", ".png", 0..=255)
+            && is_range_with_affixes(file_name, "tileset", ".png", 0..=255)
         {
             tilesets.push(value);
         }
         else if parts.len() == 2
             && parts[0] == Some("gradients")
-            && is_range_with_affixes(parts[1].unwrap_or(""), "gradient", ".png", 0..=255)
+            && is_range_with_affixes(file_name, "gradient", ".png", 0..=255)
         {
             gradients.push(value);
         }
         else if parts.len() == 2
             && parts[0] == Some("music")
-            && (is_range_with_affixes(parts[1].unwrap_or(""), "song", ".ogg", 0..=255)
-                || is_range_with_affixes(parts[1].unwrap_or(""), "intro", ".ogg", 0..=255))
+            && (is_range_with_affixes(file_name, "song", ".ogg", 0..=255)
+                || is_range_with_affixes(file_name, "intro", ".ogg", 0..=255))
         {
             songs.push(value);
         }
         else if parts.len() == 2
             && parts[0] == Some("ambiance")
-            && is_range_with_affixes(parts[1].unwrap_or(""), "ambi", ".ogg", 0..=255)
+            && is_range_with_affixes(file_name, "ambi", ".ogg", 0..=255)
         {
             ambiance.push(value);
         }
@@ -174,9 +177,8 @@ fn sort_assets(assets: HashMap<PathBuf, PathBuf>, ignored: Vec<PathBuf>) -> Unus
         {
             custom_objects.push(value);
         }
-        else if parts.len() > 1
-            && (is_range_with_affixes(parts[1].unwrap_or(""), "scene", ".png", 0..)
-                || is_range_with_affixes(parts[1].unwrap_or(""), "sound", ".ogg", 0..))
+        else if is_range_with_affixes(file_name, "scene", ".png", 0..)
+            || is_range_with_affixes(file_name, "sound", ".ogg", 0..)
         {
             cutscenes.push(value);
         }
