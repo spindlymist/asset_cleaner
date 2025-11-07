@@ -20,7 +20,6 @@ pub struct State {
     pub ignored: Vec<AssetListItem>,
     pub selected_index: Option<usize>,
     pub prev_tab: Tab,
-    pub preview_border: bool,
     pub audio: AudioState,
 }
 
@@ -92,7 +91,6 @@ impl State {
             ignored,
             selected_index: None,
             prev_tab: Tab::Tilesets,
-            preview_border: false,
             audio,
         }
     }
@@ -312,7 +310,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     
     let [width, _] = ui.content_region_avail();
     let [item_spacing_x, _] = unsafe { ui.style() }.item_spacing;
-    let preview_width = f32::max(600.0, width / 2.0);
+    let preview_width = f32::max(600.0 + 20.0, width / 2.0);
     let checklist_width = width - preview_width - item_spacing_x;
     
     let _group = ui.begin_group();
@@ -368,8 +366,51 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     _group.end();
     ui.same_line();
     
+    let _group = ui.begin_group();
+    let _disabled = ui.begin_disabled(state.selected_index.is_none());
+    
+    if ui.button("Show in Explorer") {
+        let _ = std::process::Command::new("explorer.exe")
+            .arg("/select,")
+            .arg(assets[state.selected_index.unwrap()].abs_path.as_os_str())
+            .output();
+    }
+
+    ui.same_line();
+    if ui.button("Delete this") {
+        ui.open_popup(tab.modal_id_single());
+    }
+
+    let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+    ui.modal_popup_config(tab.modal_id_single())
+        .movable(false)
+        .resizable(false)
+        .always_auto_resize(true)
+        .build(|| {
+            let Some(i) = state.selected_index else {
+                return ui.close_current_popup();
+            };
+            
+            let rel_path = assets[i].rel_path.to_string_lossy();
+            ui.text(format!("Are you sure you want to delete {rel_path}?"));
+            
+            if ui.button("Yes, destroy it!") {
+                if trash::delete(&assets[i].abs_path).is_ok() {
+                    assets.remove(state.selected_index.unwrap());
+                    state.selected_index = None;
+                }
+                ui.close_current_popup();
+            }
+            
+            ui.same_line();
+            if ui.button("No, don't do it!") {
+                ui.close_current_popup()
+            }
+        });
+    modal_padding.end();
+
     let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
-    // let _padding = ui.push_style_var(StyleVar::WindowPadding([6.0, 6.0]));
+    let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
     ui.child_window("Preview")
         .size([-1.0, -1.0])
         .menu_bar(false)
@@ -377,79 +418,33 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         .scrollable(true)
         .flags(WindowFlags::HORIZONTAL_SCROLLBAR | WindowFlags::ALWAYS_USE_WINDOW_PADDING)
         .build(|| {
-            if let Some(i) = state.selected_index {
-                if ui.button("Show in Explorer") {
-                    let _ = std::process::Command::new("explorer.exe")
-                        .arg("/select,")
-                        .arg(assets[i].abs_path.as_os_str())
-                        .output();
+            let Some(i) = state.selected_index else { return };
+            let item = &mut assets[i];
+            match item.kind {
+                AssetKind::Image => {
+                    build_preview_image(ui, textures, item);
                 }
-                
-                ui.same_line();
-                if ui.button("Delete this") {
-                    ui.open_popup(tab.modal_id_single());
+                AssetKind::Audio => {
+                    build_preview_audio(ui, item, i, &mut state.audio);
                 }
-                
-                let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-                ui.modal_popup_config(tab.modal_id_single())
-                    .movable(false)
-                    .resizable(false)
-                    .always_auto_resize(true)
-                    .build(|| {
-                        let rel_path = assets[i].rel_path.to_string_lossy();
-                        ui.text(format!("Are you sure you want to delete {rel_path}?"));
-                        
-                        if ui.button("Yes, destroy it!") {
-                            if trash::delete(&assets[i].abs_path).is_ok() {
-                                assets.remove(state.selected_index.unwrap());
-                                state.selected_index = None;
-                                ui.close_current_popup();
-                                return;
-                            }
-                            else {
-                                ui.close_current_popup();
-                            }
-                        }
-                        
-                        ui.same_line();
-                        if ui.button("No, don't do it!") {
-                            ui.close_current_popup()
-                        }
-                    });
-                modal_padding.end();
-                
-                let item = &mut assets[i];
-                match item.kind {
-                    AssetKind::Image => {
-                        ui.same_line();
-                        ui.checkbox("Border", &mut state.preview_border);
-                        build_preview_image(ui, textures, item, state.preview_border);
-                    }
-                    AssetKind::Audio => {
-                        build_preview_audio(ui, item, i, &mut state.audio);
-                    }
-                    AssetKind::Text => {
-                        build_preview_text(ui, item);
-                    }
-                    AssetKind::Other => {
-                        ui.text("No preview available.");
-                    }
+                AssetKind::Text => {
+                    build_preview_text(ui, item);
+                }
+                AssetKind::Other => {
+                    ui.text("No preview available.");
                 }
             }
         });
 }
 
-fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListItem, border: bool) {
+fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListItem) {
     if item.image.is_none() {
         // FIXME error handling
         item.image = Some(textures.create_texture_from_file(&item.abs_path).unwrap());
     }
     if let Some(image) = &item.image {
-        let mut image = imgui::Image::new(image.texture_id, [image.width, image.height]);
-        if border {
-            image = image.border_col([0.4, 0.4, 0.4, 1.0]);
-        }
-        image.build(ui);
+        imgui::Image::new(image.texture_id, [image.width, image.height])
+            .build(ui);
     }
 }
 
