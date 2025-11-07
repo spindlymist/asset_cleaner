@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, rc::Rc};
 
 use imgui::Ui;
 
@@ -7,6 +7,7 @@ use crate::{SharedState, Task, widgets::list_box};
 pub struct State {
     pub error: Option<anyhow::Error>,
     pub levels: Vec<LevelListItem>,
+    pub filtered_indices: Vec<usize>,
     pub filter: String,
     pub selected_level_index: Option<usize>,
 }
@@ -17,12 +18,14 @@ impl State {
             Ok(levels) => (levels, None),
             Err(err) => (Vec::new(), Some(err)),
         };
+        let filtered_indices: Vec<_> = Vec::from_iter(0..levels.len());
         
         Self {
             error,
             levels,
-            selected_level_index: None,
+            filtered_indices,
             filter: String::from(""),
+            selected_level_index: None,
         }
     }
 }
@@ -53,19 +56,26 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     };
     
     ui.set_next_item_width(width * 0.833);
-    ui.input_text("##Level filter", &mut state.filter)
-        .build();
+    if ui.input_text("##Level filter", &mut state.filter)
+        .build()
+    {
+        state.filtered_indices = filter_levels(&state.levels, &state.filter.to_lowercase());
+    }
     
     ui.same_line();
     open_level = ui.button_with_size("Open", [-1.0, 0.0]);
     
-    let list_items: Vec<_> = filter_levels(&state.levels, &state.filter.to_lowercase());
-    open_level |= list_box(ui, "##Level list", &mut state.selected_level_index, &list_items, [-1.0, -1.0]);
+    open_level |= list_box(ui,
+        "##Level list",
+        &mut state.selected_level_index,
+        &state.levels,
+        &state.filtered_indices,
+        [-1.0, -1.0]);
     
     if open_level
         && let Some(index) = state.selected_level_index
     {
-        let level = list_items[index];
+        let level = &state.levels[index];
         let path = shared.worlds_path.join(&level.name);
         return Task::OpenLevel(path);
     }
@@ -101,9 +111,10 @@ fn list_levels(path: &Path) -> anyhow::Result<Vec<LevelListItem>> {
     Ok(levels)
 }
 
-fn filter_levels<'a>(levels: &'a[LevelListItem], filter: &str) -> Vec<&'a LevelListItem> {
+fn filter_levels(levels: &[LevelListItem], filter: &str) -> Vec<usize> {
     levels.iter()
-        .by_ref()
-        .filter(|level| level.search_name.contains(filter))
+        .enumerate()
+        .filter(|(_, level)| level.search_name.contains(filter))
+        .map(|(i, _)| i)
         .collect()
 }

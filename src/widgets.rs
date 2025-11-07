@@ -4,7 +4,8 @@ pub fn list_box<Label, Item, Size>(
     ui: &Ui,
     label: Label,
     current_index: &mut Option<usize>,
-    list_items: &[&Item],
+    list_items: &[Item],
+    indices: &[usize],
     size: Size
 ) -> bool
 where
@@ -13,9 +14,7 @@ where
     Size: Into<mint::Vector2<f32>>
 {
     let mut double_click = false;
-    if current_index.is_some_and(|i| i >= list_items.len()) {
-        *current_index = None;
-    }
+    let mut found_index = false;
     
     ui.child_window(label)
         .size(size)
@@ -23,23 +22,30 @@ where
         .movable(false)
         .scrollable(true)
         .build(|| {
-            for (i, item) in list_items.iter().enumerate() {
+            for item_idx in indices {
+                let item = &list_items[*item_idx];
+                let is_selected = *current_index == Some(*item_idx);
                 if ui.selectable_config(item)
                     .allow_double_click(true)
-                    .selected(*current_index == Some(i))
+                    .selected(is_selected)
                     .build()
                 {
                     if ui.is_mouse_double_clicked(MouseButton::Left) {
                         double_click = true;
                     }
-                    *current_index = Some(i);
+                    *current_index = Some(*item_idx);
+                    found_index = true;
                 }
+                found_index |= is_selected;
             }
         });
+        
+    if !found_index {
+        *current_index = None;
+    }
     
     double_click
 }
-
 
 pub fn checklist_box<Label, Size>(
     ui: &Ui,
