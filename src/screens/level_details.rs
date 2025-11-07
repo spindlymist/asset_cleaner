@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 
 use imgui::{MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
@@ -137,6 +137,7 @@ pub struct AssetListItem {
     pub rel_path: PathBuf,
     pub display_name: String,
     pub image: Option<Image>,
+    pub text: Option<String>,
     pub selected: bool,
     pub kind: AssetKind,
 }
@@ -163,7 +164,7 @@ impl AssetListItem {
         let kind = match extension.as_ref().map(|ext| ext.as_str()) {
             Some("png") => AssetKind::Image,
             Some("ogg") => AssetKind::Audio,
-            Some("txt" | "ini") => AssetKind::Text,
+            Some("txt" | "ini" | "html" | "lua") => AssetKind::Text,
             _ => AssetKind::Other,
         };
         
@@ -185,6 +186,7 @@ impl AssetListItem {
             rel_path,
             display_name: file_name,
             image: None,
+            text: None,
             selected: false,
             kind,
         }
@@ -507,8 +509,16 @@ fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state:
     }
 }
 
-fn build_preview_text(ui: &Ui, _item: &AssetListItem) {
-    ui.text("No preview available.");
+fn build_preview_text(ui: &Ui, item: &mut AssetListItem) {
+    if item.text.is_none()
+        && let Ok(text) = fs::read_to_string(&item.abs_path)
+    {
+        item.text = Some(text);
+    }
+    if let Some(text) = item.text.as_ref() {
+        let _border = ui.push_style_var(StyleVar::FrameBorderSize(1.0));
+        ui.text_wrapped(text);
+    }
 }
 
 impl Tab {
@@ -569,6 +579,6 @@ impl Tab {
     }
 }
 
-pub fn compare_list_items(a: &AssetListItem, b: &AssetListItem) -> std::cmp::Ordering {
+fn compare_list_items(a: &AssetListItem, b: &AssetListItem) -> std::cmp::Ordering {
     natord::compare(&a.display_name, &b.display_name)
 }
