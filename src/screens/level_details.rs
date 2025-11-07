@@ -24,28 +24,6 @@ pub struct State {
     pub audio: AudioState,
 }
 
-pub struct AudioState {
-    pub audio_manager: AudioManager,
-    pub playing_index: Option<usize>,
-    pub playing_handle: Option<StreamingSoundHandle<FromFileError>>,
-    pub duration: f64,
-}
-
-impl AudioState {
-    fn stop(&mut self, tween: Tween) {
-        if let Some(mut handle) = self.playing_handle.take() {
-            handle.stop(tween);
-            self.playing_index = None;
-        }
-    }
-    
-    fn is_playing(&self) -> bool {
-        self.playing_handle
-            .as_ref()
-            .is_some_and(|handle| handle.state() == PlaybackState::Playing)
-    }
-}
-
 impl State {
     pub fn new(level_dir: PathBuf, unused_assets: UnusedAssets, textures: &mut Textures) -> Self {
         let mut tilesets: Vec<_> = unused_assets.tilesets.into_iter()
@@ -120,18 +98,39 @@ impl State {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Tab {
-    Tilesets,
-    Gradients,
-    Songs,
-    Ambiance,
-    Sounds,
-    CustomObjects,
-    Cutscenes,
-    Misc,
-    Ignored,
+pub struct AudioState {
+    pub audio_manager: AudioManager,
+    pub playing_index: Option<usize>,
+    pub playing_handle: Option<StreamingSoundHandle<FromFileError>>,
+    pub duration: f64,
 }
+
+impl AudioState {
+    fn stop(&mut self, tween: Tween) {
+        if let Some(mut handle) = self.playing_handle.take() {
+            handle.stop(tween);
+            self.playing_index = None;
+        }
+    }
+    
+    fn is_playing(&self) -> bool {
+        self.playing_handle
+            .as_ref()
+            .is_some_and(|handle| handle.state() == PlaybackState::Playing)
+    }
+}
+
+static FADE_OUT_SLOW: Tween = Tween {
+    start_time: kira::StartTime::Immediate,
+    duration: std::time::Duration::from_millis(400),
+    easing: kira::Easing::Linear,
+};
+
+static FADE_OUT_FAST: Tween = Tween {
+    start_time: kira::StartTime::Immediate,
+    duration: std::time::Duration::from_millis(10),
+    easing: kira::Easing::Linear,
+};
 
 pub struct AssetListItem {
     pub abs_path: PathBuf,
@@ -192,16 +191,18 @@ impl AssetListItem {
     }
 }
 
-static FADE_OUT_SLOW: Tween = Tween {
-    start_time: kira::StartTime::Immediate,
-    duration: std::time::Duration::from_millis(400),
-    easing: kira::Easing::Linear,
-};
-static FADE_OUT_FAST: Tween = Tween {
-    start_time: kira::StartTime::Immediate,
-    duration: std::time::Duration::from_millis(10),
-    easing: kira::Easing::Linear,
-};
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Tab {
+    Tilesets,
+    Gradients,
+    Songs,
+    Ambiance,
+    Sounds,
+    CustomObjects,
+    Cutscenes,
+    Misc,
+    Ignored,
+}
 
 pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures) -> Task {
     // Level icon

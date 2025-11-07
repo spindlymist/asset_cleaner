@@ -50,14 +50,25 @@ fn main() -> Result<()> {
     let renderer = renderer_init(&platform.window, platform.window.size())?;
     let imgui = imgui_init(platform, renderer);
     
-    let mut app = app_init()?;
-    run(imgui, |ui, window, textures| build_ui(&mut app, ui, window, textures));
+    let mut app = init_app()?;
+    run(imgui, |ui, window, textures| {
+        let (width, height) = window.size();
+        let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+        ui.window("Main")
+            .position([0.0, 0.0], Condition::Always)
+            .size([width as f32, height as f32], Condition::Always)
+            .title_bar(false)
+            .movable(false)
+            .resizable(false)
+            .build(|| build_ui(&mut app, ui, window, textures));
+    });
 
     Ok(())
 }
 
-fn app_init() -> Result<App> {
+fn init_app() -> Result<App> {
     let Some(ks_path) = try_find_ks()? else {
+        // TODO startup error handling
         anyhow::bail!("KS not found");
     };
     let worlds_path = ks_path.join("Worlds");
@@ -74,30 +85,18 @@ fn app_init() -> Result<App> {
     })
 }
 
-fn build_ui(app: &mut App, ui: &Ui, window: &Window, textures: &mut Textures) {
-    let (width, height) = window.size();
-    let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
-    
-    let mut task = Task::None;
-    ui.window("Main")
-        .position([0.0, 0.0], Condition::Always)
-        .size([width as f32, height as f32], Condition::Always)
-        .title_bar(false)
-        .movable(false)
-        .resizable(false)
-        .build(|| {
-            task = match &mut app.screen {
-                Screen::LevelSelect(state) => {
-                    level_select::build_ui(&mut app.shared, state, ui)
-                }
-                Screen::Progress(state) => {
-                    progress::build_ui(&mut app.shared, state, ui)
-                }
-                Screen::LevelDetails(state) => {
-                    level_details::build_ui(&mut app.shared, state, ui, textures)
-                }
-            }
-        });
+fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {   
+    let task = match &mut app.screen {
+        Screen::LevelSelect(state) => {
+            level_select::build_ui(&mut app.shared, state, ui)
+        }
+        Screen::Progress(state) => {
+            progress::build_ui(&mut app.shared, state, ui)
+        }
+        Screen::LevelDetails(state) => {
+            level_details::build_ui(&mut app.shared, state, ui, textures)
+        }
+    };
     
     match task {
         Task::SelectLevel => {
