@@ -5,6 +5,20 @@ use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, Pla
 
 use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box}};
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum Tab {
+    Tilesets,
+    Gradients,
+    Songs,
+    Ambiance,
+    Sounds,
+    CustomObjects,
+    Cutscenes,
+    Misc,
+    Ignored,
+}
+const N_TABS: usize = Tab::Ignored as usize + 1;
+
 pub struct State {
     pub level_dir: PathBuf,
     pub level_name: String,
@@ -18,7 +32,7 @@ pub struct State {
     pub cutscenes: Vec<AssetListItem>,
     pub misc: Vec<AssetListItem>,
     pub ignored: Vec<AssetListItem>,
-    pub selected_index: Option<usize>,
+    pub selected_indices: [Option<usize>; N_TABS],
     pub prev_tab: Tab,
     pub audio: AudioState,
 }
@@ -89,7 +103,7 @@ impl State {
             cutscenes,
             misc,
             ignored,
-            selected_index: None,
+            selected_indices: [Some(0); N_TABS],
             prev_tab: Tab::Tilesets,
             audio,
         }
@@ -189,19 +203,6 @@ impl AssetListItem {
             kind,
         }
     }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum Tab {
-    Tilesets,
-    Gradients,
-    Songs,
-    Ambiance,
-    Sounds,
-    CustomObjects,
-    Cutscenes,
-    Misc,
-    Ignored,
 }
 
 pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures) -> Task {
@@ -307,6 +308,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         Tab::Misc => &mut state.misc,
         Tab::Ignored => &mut state.ignored,
     };
+    let selected_index = &mut state.selected_indices[tab as usize];
     
     let [width, _] = ui.content_region_avail();
     let [item_spacing_x, _] = unsafe { ui.style() }.item_spacing;
@@ -349,7 +351,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                             true
                         }
                     });
-                    state.selected_index = None;
+                    *selected_index = None;
                     ui.close_current_popup();
                 }
                 
@@ -361,18 +363,18 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         modal_padding.end();
     }
     
-    checklist_box(ui, tab.checklist_id(), &mut state.selected_index, assets, [checklist_width, -1.0]);
+    checklist_box(ui, tab.checklist_id(), selected_index, assets, [checklist_width, -1.0]);
     
     _group.end();
     ui.same_line();
     
     let _group = ui.begin_group();
-    let _disabled = ui.begin_disabled(state.selected_index.is_none());
+    let _disabled = ui.begin_disabled(selected_index.is_none());
     
     if ui.button("Show in Explorer") {
         let _ = std::process::Command::new("explorer.exe")
             .arg("/select,")
-            .arg(assets[state.selected_index.unwrap()].abs_path.as_os_str())
+            .arg(assets[selected_index.unwrap()].abs_path.as_os_str())
             .output();
     }
 
@@ -387,17 +389,17 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         .resizable(false)
         .always_auto_resize(true)
         .build(|| {
-            let Some(i) = state.selected_index else {
+            let Some(i) = selected_index else {
                 return ui.close_current_popup();
             };
             
-            let rel_path = assets[i].rel_path.to_string_lossy();
+            let rel_path = assets[*i].rel_path.to_string_lossy();
             ui.text(format!("Are you sure you want to delete {rel_path}?"));
             
             if ui.button("Yes, destroy it!") {
-                if trash::delete(&assets[i].abs_path).is_ok() {
-                    assets.remove(state.selected_index.unwrap());
-                    state.selected_index = None;
+                if trash::delete(&assets[*i].abs_path).is_ok() {
+                    assets.remove(selected_index.unwrap());
+                    *selected_index = None;
                 }
                 ui.close_current_popup();
             }
@@ -418,14 +420,14 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         .scrollable(true)
         .flags(WindowFlags::HORIZONTAL_SCROLLBAR | WindowFlags::ALWAYS_USE_WINDOW_PADDING)
         .build(|| {
-            let Some(i) = state.selected_index else { return };
-            let item = &mut assets[i];
+            let Some(i) = selected_index else { return };
+            let item = &mut assets[*i];
             match item.kind {
                 AssetKind::Image => {
                     build_preview_image(ui, textures, item);
                 }
                 AssetKind::Audio => {
-                    build_preview_audio(ui, item, i, &mut state.audio);
+                    build_preview_audio(ui, item, *i, &mut state.audio);
                 }
                 AssetKind::Text => {
                     build_preview_text(ui, item);
