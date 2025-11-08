@@ -81,8 +81,7 @@ impl State {
             .expect("Create audio manager");
         let audio = AudioState {
             audio_manager,
-            playing_index: None,
-            playing_handle: None,
+            stream_handle: None,
             duration: 0.0,
         };
         
@@ -112,21 +111,19 @@ impl State {
 
 pub struct AudioState {
     pub audio_manager: AudioManager,
-    pub playing_index: Option<usize>,
-    pub playing_handle: Option<StreamingSoundHandle<FromFileError>>,
+    pub stream_handle: Option<StreamingSoundHandle<FromFileError>>,
     pub duration: f64,
 }
 
 impl AudioState {
     fn stop(&mut self, tween: Tween) {
-        if let Some(mut handle) = self.playing_handle.take() {
+        if let Some(mut handle) = self.stream_handle.take() {
             handle.stop(tween);
-            self.playing_index = None;
         }
     }
     
     fn is_playing(&self) -> bool {
-        self.playing_handle
+        self.stream_handle
             .as_ref()
             .is_some_and(|handle| handle.state() == PlaybackState::Playing)
     }
@@ -363,7 +360,11 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         modal_padding.end();
     }
     
+    let prev_index = selected_index.clone();
     checklist_box(ui, tab.checklist_id(), selected_index, assets, [checklist_width, -1.0]);
+    if *selected_index != prev_index {
+        state.audio.stop(FADE_OUT_SLOW);
+    }
     
     _group.end();
     ui.same_line();
@@ -452,12 +453,9 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
 
 fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state: &mut AudioState) {    
     let size = [168.0, 48.0];
-    let is_playing =
-        audio_state.playing_index == Some(index)
-        && audio_state.is_playing();
     
-    if is_playing {
-        let t = audio_state.playing_handle
+    if audio_state.is_playing() {
+        let t = audio_state.stream_handle
             .as_ref()
             .map(|handle| handle.position() / audio_state.duration)
             .unwrap_or(1.0) as f32;
@@ -498,8 +496,7 @@ fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state:
             if let Ok(data) = StreamingSoundData::from_file(&item.abs_path) {
                 audio_state.duration = data.duration().as_secs_f64();
                 if let Ok(handle) = audio_state.audio_manager.play(data) {
-                    audio_state.playing_handle = Some(handle);
-                    audio_state.playing_index = Some(index);
+                    audio_state.stream_handle = Some(handle);
                 }
             }
         }
