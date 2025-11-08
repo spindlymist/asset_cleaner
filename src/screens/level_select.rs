@@ -1,8 +1,8 @@
-use std::{fs, path::Path, rc::Rc};
+use std::{fs, path::Path};
 
 use imgui::Ui;
 
-use crate::{SharedState, Task, widgets::list_box};
+use crate::{SharedState, Task, widgets::filtered_list_box};
 
 pub struct State {
     pub error: Option<anyhow::Error>,
@@ -25,7 +25,7 @@ impl State {
             levels,
             filtered_indices,
             filter: String::from(""),
-            selected_level_index: None,
+            selected_level_index: Some(0),
         }
     }
 }
@@ -65,7 +65,7 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     ui.same_line();
     open_level = ui.button_with_size("Open", [-1.0, 0.0]);
     
-    open_level |= list_box(ui,
+    open_level |= filtered_list_box(ui,
         "##Level list",
         &mut state.selected_level_index,
         &state.levels,

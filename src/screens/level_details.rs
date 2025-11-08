@@ -310,7 +310,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     
     let [width, _] = ui.content_region_avail();
     let [item_spacing_x, _] = unsafe { ui.style() }.item_spacing;
-    let preview_width = f32::max(600.0 + 20.0, width / 2.0);
+    let preview_width = f32::max(600.0 + 20.0, f32::ceil(width / 2.0));
     let checklist_width = width - preview_width - item_spacing_x;
     
     let _group = ui.begin_group();

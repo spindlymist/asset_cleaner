@@ -1,6 +1,6 @@
-use imgui::{MouseButton, Ui};
+use imgui::{Key, MouseButton, Ui};
 
-pub fn list_box<Label, Item, Size>(
+pub fn filtered_list_box<Label, Item, Size>(
     ui: &Ui,
     label: Label,
     current_index: &mut Option<usize>,
@@ -15,6 +15,41 @@ where
 {
     let mut double_click = false;
     let mut found_index = false;
+    let mut show_selected = false;
+    
+    if ui.is_key_pressed(Key::DownArrow)
+        && let Some(item_index) = current_index.as_mut()
+        && let Some(list_index) = indices.iter()
+            .position(|i| i == item_index)
+        && let Some(new_index) = indices.get(list_index + 1)
+    {
+        *item_index = *new_index;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::UpArrow)
+        && let Some(item_index) = current_index.as_mut()
+        && let Some(list_index) = indices.iter()
+            .position(|i| i == item_index)
+        && list_index > 0
+        && let Some(new_index) = indices.get(list_index - 1)
+    {
+        *item_index = *new_index;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::Home)
+        && let Some(item_index) = current_index.as_mut()
+        && let Some(new_index) = indices.first()
+    {
+        *item_index = *new_index;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::End)
+        && let Some(item_index) = current_index.as_mut()
+        && let Some(new_index) = indices.last()
+    {
+        *item_index = *new_index;
+        show_selected = true;
+    }
     
     ui.child_window(label)
         .size(size)
@@ -25,6 +60,11 @@ where
             for item_idx in indices {
                 let item = &list_items[*item_idx];
                 let is_selected = *current_index == Some(*item_idx);
+                
+                if is_selected && show_selected {
+                    ui.set_scroll_here_y();
+                }
+                
                 if ui.selectable_config(item)
                     .allow_double_click(true)
                     .selected(is_selected)
@@ -36,6 +76,7 @@ where
                     *current_index = Some(*item_idx);
                     found_index = true;
                 }
+                
                 found_index |= is_selected;
             }
         });
@@ -59,8 +100,39 @@ where
     Size: Into<mint::Vector2<f32>>,
 {
     let mut double_click = false;
+    let mut show_selected = false;
+    
     if current_index.is_some_and(|i| i >= items.len()) {
         *current_index = None;
+    }
+    
+    if ui.is_key_pressed(Key::DownArrow)
+        && let Some(current_index) = current_index.as_mut()
+        && *current_index < items.len() - 1
+    {
+        *current_index += 1;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::UpArrow)
+        && let Some(current_index) = current_index.as_mut()
+        && *current_index > 0
+    {
+        *current_index -= 1;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::Home)
+        && let Some(current_index) = current_index.as_mut()
+        && !items.is_empty()
+    {
+        *current_index = 0;
+        show_selected = true;
+    }
+    else if ui.is_key_pressed(Key::End)
+        && let Some(current_index) = current_index.as_mut()
+        && !items.is_empty()
+    {
+        *current_index = items.len() - 1;
+        show_selected = true;
     }
     
     ui.child_window(label)
@@ -80,13 +152,18 @@ where
             
             for (i, item) in items.iter_mut().enumerate() {     
                 let (label, checked) = item.label_and_checked();
+                let is_selected = *current_index == Some(i);
+                
+                if is_selected && show_selected {
+                    ui.set_scroll_here_y();
+                }
                           
                 let cursor_pos_initial = ui.cursor_pos();
                 ui.set_cursor_pos([cursor_pos_initial[0] + selectable_x, cursor_pos_initial[1]]);
                 if ui.selectable_config(format!("##{}", label))
                     .size([selectable_width, selectable_height])
                     .allow_double_click(true)
-                    .selected(*current_index == Some(i))
+                    .selected(is_selected)
                     .build()
                 {
                     if ui.is_mouse_double_clicked(MouseButton::Left) {
