@@ -307,12 +307,9 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     };
     let selected_index = &mut state.selected_indices[tab as usize];
     
-    let [width, _] = ui.content_region_avail();
-    let [item_spacing_x, _] = unsafe { ui.style() }.item_spacing;
-    let preview_width = f32::max(600.0 + 20.0, f32::ceil(width / 2.0));
-    let checklist_width = width - preview_width - item_spacing_x;
-    
-    let _group = ui.begin_group();
+    let cursor_initial_screen_pos = ui.cursor_screen_pos();
+    let full_width = ui.content_region_avail()[0];
+    let group_left = ui.begin_group();
     
     if ui.button("Check all") {
         assets.iter_mut().for_each(|item| item.selected = true);
@@ -323,8 +320,8 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         assets.iter_mut().for_each(|item| item.selected = false);
     }
     
+    ui.same_line();
     {
-        ui.same_line();
         let n_checked = assets.iter().filter(|item| item.selected).count();
         let _disabled = ui.begin_disabled(n_checked == 0);
         if ui.button(format!("Delete checked ({})", n_checked)) {
@@ -342,7 +339,15 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                 if ui.button("Yes, destroy them all!") {
                     assets.retain(|item| {
                         if item.selected {
-                            trash::delete(&item.abs_path).is_err()
+                            match trash::delete(&item.abs_path) {
+                                Ok(_) => {
+                                    if let Some(ref image) = item.image {
+                                        textures.delete_texture(image.texture_id);
+                                    }
+                                    false
+                                }
+                                Err(_) => true
+                            }
                         }
                         else {
                             true
@@ -360,57 +365,77 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         modal_padding.end();
     }
     
+    const PREVIEW_MIN_WIDTH: f32 = 600.0 + 20.0;
+    let item_spacing_x = unsafe { ui.style() }.item_spacing[0];
+    let buttons_width = ui.item_rect_max()[0] - cursor_initial_screen_pos[0];
+    let left_half_width = f32::floor((full_width - item_spacing_x) * 0.5);
+    let right_half_width = full_width - left_half_width;
+    let checklist_width =
+        if right_half_width >= PREVIEW_MIN_WIDTH {
+            left_half_width
+        }
+        else {
+            buttons_width
+        };
+
     let prev_index = selected_index.clone();
     checklist_box(ui, tab.checklist_id(), selected_index, assets, [checklist_width, -1.0]);
     if *selected_index != prev_index {
         state.audio.stop(FADE_OUT_SLOW);
     }
     
-    _group.end();
+    group_left.end();
     ui.same_line();
+    let _group_right = ui.begin_group();
     
-    let _group = ui.begin_group();
-    let _disabled = ui.begin_disabled(selected_index.is_none());
-    
-    if ui.button("Show in Explorer") {
-        let _ = std::process::Command::new("explorer.exe")
-            .arg("/select,")
-            .arg(assets[selected_index.unwrap()].abs_path.as_os_str())
-            .output();
+    {
+        let _disabled = ui.begin_disabled(selected_index.is_none());
+        
+        if ui.button("Show in Explorer") {
+            let _ = std::process::Command::new("explorer.exe")
+                .arg("/select,")
+                .arg(assets[selected_index.unwrap()].abs_path.as_os_str())
+                .output();
+        }
+
+        ui.same_line();
+        if ui.button("Delete this") {
+            ui.open_popup(tab.modal_id_single());
+        }
     }
 
-    ui.same_line();
-    if ui.button("Delete this") {
-        ui.open_popup(tab.modal_id_single());
-    }
-
-    let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-    ui.modal_popup_config(tab.modal_id_single())
-        .movable(false)
-        .resizable(false)
-        .always_auto_resize(true)
-        .build(|| {
-            let Some(i) = selected_index else {
-                return ui.close_current_popup();
-            };
-            
-            let rel_path = assets[*i].rel_path.to_string_lossy();
-            ui.text(format!("Are you sure you want to delete {rel_path}?"));
-            
-            if ui.button("Yes, destroy it!") {
-                if trash::delete(&assets[*i].abs_path).is_ok() {
-                    assets.remove(selected_index.unwrap());
-                    *selected_index = None;
+    {
+        let _modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+        ui.modal_popup_config(tab.modal_id_single())
+            .movable(false)
+            .resizable(false)
+            .always_auto_resize(true)
+            .build(|| {
+                let Some(i) = selected_index else {
+                    return ui.close_current_popup();
+                };
+                let item = &assets[*i];
+                
+                let rel_path = item.rel_path.to_string_lossy();
+                ui.text(format!("Are you sure you want to delete {rel_path}?"));
+                
+                if ui.button("Yes, destroy it!") {
+                    if trash::delete(&item.abs_path).is_ok() {
+                        if let Some(ref image) = item.image {
+                            textures.delete_texture(image.texture_id);
+                        }
+                        assets.remove(*i);
+                        *selected_index = None;
+                    }
+                    ui.close_current_popup();
                 }
-                ui.close_current_popup();
-            }
-            
-            ui.same_line();
-            if ui.button("No, don't do it!") {
-                ui.close_current_popup()
-            }
-        });
-    modal_padding.end();
+                
+                ui.same_line();
+                if ui.button("No, don't do it!") {
+                    ui.close_current_popup()
+                }
+            });
+    }
 
     let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
     let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
