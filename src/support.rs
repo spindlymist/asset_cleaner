@@ -1,8 +1,12 @@
 use std::{fs, io};
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::{Context, Result};
 use image::{EncodableLayout, imageops};
+
+const IDLE_FPS: f64 = 60.0;
+const IDLE_FRAME_DURATION_MS: f64 = 1000.0 / IDLE_FPS;
 
 pub fn run<F>(imgui: ImguiState, mut build: F) where
     F: FnMut(&imgui::Ui, &sdl2::video::Window, &mut Textures)
@@ -15,14 +19,21 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
     let im_platform = platform.im_platform.as_mut().expect("Platform should be initialized");
     let im_renderer = renderer.im_renderer.as_mut().expect("Renderer should be initialized");
     
+    let mut last_frame_start = Instant::now();
     let mut is_in_background = false;
     
     // ui.push_style_color() doesn't work
     im_context.style_mut().colors[imgui::StyleColor::ModalWindowDimBg as usize] = [0.0, 0.0, 0.0, 0.95];
     
     'main_loop: loop {
+        // Calculate how long to wait for the next event without missing fps target
+        let last_frame_duration_ms = (Instant::now() - last_frame_start).as_secs_f64() * 1000.0;
+        let wait_ms = f64::max(0.0, f64::round(IDLE_FRAME_DURATION_MS - last_frame_duration_ms)) as u32;
+        let first_event = event_pump.wait_event_timeout(wait_ms);
+        last_frame_start = Instant::now();
+        
         // Process events
-        if let Some(first_event) = event_pump.wait_event_timeout(16) {
+        if let Some(first_event) = first_event {
             let events = [first_event]
                 .into_iter()
                 .chain(event_pump.poll_iter());
