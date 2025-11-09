@@ -85,7 +85,7 @@ fn init_app() -> Result<App> {
     })
 }
 
-fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {   
+fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
     let task = match &mut app.screen {
         Screen::LevelSelect(state) => {
             level_select::build_ui(&mut app.shared, state, ui)

@@ -453,7 +453,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                     build_preview_image(ui, textures, item);
                 }
                 AssetKind::Audio => {
-                    build_preview_audio(ui, item, *i, &mut state.audio);
+                    build_preview_audio(ui, item, &mut state.audio);
                 }
                 AssetKind::Text => {
                     build_preview_text(ui, item);
@@ -476,7 +476,7 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
     }
 }
 
-fn build_preview_audio(ui: &Ui, item: &AssetListItem, index: usize, audio_state: &mut AudioState) {    
+fn build_preview_audio(ui: &Ui, item: &AssetListItem, audio_state: &mut AudioState) {    
     let size = [168.0, 48.0];
     
     if audio_state.is_playing() {
