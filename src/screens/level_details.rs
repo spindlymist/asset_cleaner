@@ -495,7 +495,7 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
     }
 }
 
-fn build_preview_audio(ui: &Ui, item: &AssetListItem, audio_state: &mut AudioState) {    
+fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut AudioState) {    
     let size = [168.0, 48.0];
     
     if audio_state.is_playing() {
@@ -507,16 +507,31 @@ fn build_preview_audio(ui: &Ui, item: &AssetListItem, audio_state: &mut AudioSta
             audio_state.stop(FADE_OUT_FAST);
         }
     }
-    else {
-        if ui.button_with_size("Play", size) {
-            audio_state.stop(FADE_OUT_FAST);
-            if let Ok(data) = StreamingSoundData::from_file(&item.abs_path) {
-                audio_state.duration = data.duration().as_secs_f64();
-                if let Ok(handle) = audio_state.audio_manager.play(data) {
-                    audio_state.stream_handle = Some(handle);
-                }
+    else if ui.button_with_size("Play", size) {
+        audio_state.stop(FADE_OUT_FAST);
+        match StreamingSoundData::from_file(&item.abs_path) {
+            Ok(data) => {
+                let duration = data.duration().as_secs_f64();
+                match audio_state.audio_manager.play(data) {
+                    Ok(handle) => {
+                        audio_state.stream_handle = Some(handle);
+                        audio_state.duration = duration;
+                        item.error = None;
+                    }
+                    Err(err) => {
+                        item.error = Some(anyhow::Error::new(err).context("Failed to play sound."));
+                    }
+                };
             }
-        }
+            Err(err) => {
+                item.error = Some(anyhow::Error::new(err).context("Failed to load sound."));
+            }
+        };
+    }
+    
+    if let Some(ref err) = item.error {
+        ui.text("An error occurred while loading the preview:");
+        error_display(ui, err);
     }
 }
 
