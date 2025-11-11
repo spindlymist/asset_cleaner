@@ -1,4 +1,4 @@
-use imgui::{Key, MouseButton, Ui, WindowFlags};
+use imgui::{Key, MouseButton, StyleColor, Ui, WindowFlags};
 
 pub fn filtered_list_box<Label, Item, Size>(
     ui: &Ui,
@@ -192,4 +192,49 @@ pub fn error_display(ui: &Ui, err: &anyhow::Error) {
         ui.bullet();
         ui.text_wrapped(format!("caused by: {cause}"));
     }
+}
+
+pub fn progress_button_with_size<Label>(ui: &Ui, label: Label, size: [f32; 2], progress: f32) -> bool
+where
+    Label: AsRef<str>,
+{
+    let top_left = ui.cursor_screen_pos();
+    let button_bottom_right = [
+        top_left[0] + size[0],
+        top_left[1] + size[1]
+    ];
+    let progress_bottom_right = [
+        top_left[0] + progress * size[0],
+        top_left[1] + size[1]
+    ];
+
+    let is_button_hovered = ui.is_mouse_hovering_rect(top_left, button_bottom_right);
+    let is_button_active = is_button_hovered && ui.is_mouse_down(MouseButton::Left);
+
+    let style_color = 
+        if is_button_active {
+            StyleColor::ButtonActive
+        }
+        else if is_button_hovered {
+            StyleColor::ButtonHovered
+        }
+        else {
+            StyleColor::Button
+        };
+    let color_progress = ui.style_color(style_color);
+    let color_button = [
+        color_progress[0],
+        color_progress[1],
+        color_progress[2],
+        color_progress[3] * 0.5
+    ];
+
+    ui.get_window_draw_list()
+        .add_rect(top_left, progress_bottom_right, color_progress)
+        .filled(true)
+        .rounding(2.0)
+        .build();
+
+    let _button_color = ui.push_style_color(style_color, color_button);
+    ui.button_with_size(label, size)
 }

@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use imgui::{StyleVar, Ui, WindowFlags};
+use imgui::{StyleVar, Ui};
 
 use crate::{SharedState, Task, imgui_ext::ImguiExt, widgets::{error_display, filtered_list_box}};
 

@@ -1,9 +1,9 @@
 use std::{fs, path::{Path, PathBuf}};
 
-use imgui::{MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
+use imgui::{StyleColor, StyleVar, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 
-use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display}};
+use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Tab {
@@ -131,7 +131,7 @@ impl AudioState {
 
 static FADE_OUT_SLOW: Tween = Tween {
     start_time: kira::StartTime::Immediate,
-    duration: std::time::Duration::from_millis(400),
+    duration: std::time::Duration::from_millis(300),
     easing: kira::Easing::Linear,
 };
 
@@ -503,34 +503,7 @@ fn build_preview_audio(ui: &Ui, item: &AssetListItem, audio_state: &mut AudioSta
             .as_ref()
             .map(|handle| handle.position() / audio_state.duration)
             .unwrap_or(1.0) as f32;
-        
-        let top_left = ui.cursor_screen_pos();
-        let button_bottom_right = [top_left[0] + size[0], top_left[1] + size[1]];
-        let progress_bottom_right = [top_left[0] + t * size[0], top_left[1] + size[1]];
-        
-        let is_button_hovered = ui.is_mouse_hovering_rect(top_left, button_bottom_right);
-        let is_button_active = is_button_hovered && ui.is_mouse_down(MouseButton::Left);
-        
-        let style_color = 
-            if is_button_active {
-                StyleColor::ButtonActive
-            }
-            else if is_button_hovered {
-                StyleColor::ButtonHovered
-            }
-            else {
-                StyleColor::Button
-            };
-        let color_progress = ui.style_color(style_color);
-        let color_button = [color_progress[0], color_progress[1], color_progress[2], color_progress[3] * 0.5];
-            
-        ui.get_window_draw_list()
-            .add_rect(top_left, progress_bottom_right, color_progress)
-            .filled(true)
-            .build();
-        
-        let _token = ui.push_style_color(style_color, color_button);
-        if ui.button_with_size("Stop", size) {
+        if progress_button_with_size(ui, "Stop", size, t) {
             audio_state.stop(FADE_OUT_FAST);
         }
     }

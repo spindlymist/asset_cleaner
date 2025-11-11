@@ -110,6 +110,7 @@ fn init_app() -> App {
 }
 
 fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
+    let _rounding = ui.push_style_var(StyleVar::FrameRounding(2.0));
     let task = match &mut app.screen {
         Screen::StartupFailed(err) => {
             ui.text("Startup failed:");
