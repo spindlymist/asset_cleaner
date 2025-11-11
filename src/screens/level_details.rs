@@ -1,7 +1,9 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs::{self, File}, path::{Path, PathBuf}, time::Duration};
 
-use imgui::{StyleColor, StyleVar, Ui, WindowFlags};
+use anyhow::Result;
+use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
+use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTagKey}, default::formats::OggReader};
 
 use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size}};
 
@@ -148,8 +150,16 @@ pub struct AssetListItem {
     pub error: Option<anyhow::Error>,
     pub image: Option<Image>,
     pub text: Option<String>,
+    pub meta: Option<Metadata>,
     pub selected: bool,
     pub kind: AssetKind,
+}
+
+#[derive(Debug, Default)]
+pub struct Metadata {
+    artist: String,
+    title: String,
+    duration: String,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -198,6 +208,7 @@ impl AssetListItem {
             error: None,
             image: None,
             text: None,
+            meta: None,
             selected: false,
             kind,
         }
@@ -529,6 +540,33 @@ fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut Audi
         };
     }
     
+    if item.meta.is_none() {
+        item.meta = Some(metadata_from_file(&item.abs_path).unwrap_or_default());
+    }
+    
+    if let Some(ref meta) = item.meta {
+        let flags = TableFlags::BORDERS | TableFlags::SIZING_FIXED_FIT;
+        if let Some(_table) = ui.begin_table_with_flags("##Metadata", 2, flags) {
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text("Artist");
+            ui.table_next_column();
+            ui.text(&meta.artist);
+            
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text("Title");
+            ui.table_next_column();
+            ui.text(&meta.title);
+            
+            ui.table_next_row();
+            ui.table_next_column();
+            ui.text("Duration");
+            ui.table_next_column();
+            ui.text(&meta.duration);
+        }
+    }
+    
     if let Some(ref err) = item.error {
         ui.text("An error occurred while loading the preview:");
         error_display(ui, err);
@@ -622,4 +660,100 @@ impl Tab {
 
 fn compare_list_items(a: &AssetListItem, b: &AssetListItem) -> std::cmp::Ordering {
     natord::compare(&a.display_name, &b.display_name)
+}
+
+fn metadata_from_file(path: &Path) -> Result<Metadata> {
+    let mut artist = None;
+    let mut title = None;
+    let mut duration = None;
+    
+    let file = Box::new(File::open(path)?);
+    let source_stream = MediaSourceStream::new(file, Default::default());
+    let mut reader = OggReader::try_new(source_stream, &Default::default())?;
+    
+    let mut meta = reader.metadata();
+    if let Some(meta) = meta.skip_to_latest() {
+        for tag in meta.tags() {
+            match tag.std_key {
+                Some(StandardTagKey::Artist) => {
+                    artist = Some(tag.value.to_string());
+                }
+                Some(StandardTagKey::TrackTitle) => {
+                    title = Some(tag.value.to_string());
+                }
+                _ => {}
+            };
+        }
+    };
+    
+    if let Some(track) = reader.default_track()
+        && let Some(ref time_base) = track.codec_params.time_base
+        && let Some(n_frames) = track.codec_params.n_frames
+    {
+        let seconds = Duration::from(time_base.calc_time(n_frames))
+            .as_secs_f64()
+            .round() as u64;
+        duration = Some(human_readable_duration(seconds));
+    }
+    
+    Ok(Metadata {
+        artist: artist.unwrap_or("".to_owned()),
+        title: title.unwrap_or("".to_owned()),
+        duration: duration.unwrap_or("".to_owned()),
+    })
+}
+
+fn human_readable_duration(seconds: u64) -> String {
+    const ONE_HOUR: u64 = 60 * 60;
+    
+    let h = seconds / ONE_HOUR;
+    let m = (seconds % ONE_HOUR) / 60;
+    let s = (seconds % ONE_HOUR) % 60;
+    
+    if h > 0 {
+        format!("{h}:{m:02}:{s:02}")
+    }
+    else {
+        format!("{m}:{s:02}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::human_readable_duration;
+    
+    #[test]
+    fn human_readable_duration_zero_seconds() {
+        let seconds = 0;
+        let expected = "0:00";
+        assert_eq!(human_readable_duration(seconds), expected);
+    }
+    
+    #[test]
+    fn human_readable_duration_less_than_one_minute() {
+        let seconds = 30;
+        let expected = "0:30";
+        assert_eq!(human_readable_duration(seconds), expected);
+    }
+    
+    #[test]
+    fn human_readable_duration_more_than_one_minute() {
+        let seconds = 60 * 5 + 45;
+        let expected = "5:45";
+        assert_eq!(human_readable_duration(seconds), expected);
+    }
+    
+    #[test]
+    fn human_readable_duration_more_than_ten_minutes() {
+        let seconds = 60 * 12 + 30;
+        let expected = "12:30";
+        assert_eq!(human_readable_duration(seconds), expected);
+    }
+    
+    #[test]
+    fn human_readable_duration_more_than_one_hour() {
+        let seconds = 60 * 60 + 1;
+        let expected = "1:00:01";
+        assert_eq!(human_readable_duration(seconds), expected);
+    }
 }
