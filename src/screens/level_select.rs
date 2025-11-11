@@ -1,8 +1,8 @@
 use std::{fs, path::Path};
 
-use imgui::Ui;
+use imgui::{StyleVar, Ui, WindowFlags};
 
-use crate::{SharedState, Task, widgets::filtered_list_box};
+use crate::{SharedState, Task, imgui_ext::ImguiExt, widgets::{error_display, filtered_list_box}};
 
 pub struct State {
     pub error: Option<anyhow::Error>,
@@ -43,17 +43,17 @@ impl AsRef<str> for LevelListItem {
 }
 
 pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
-    if let Some(error) = state.error.as_ref() {
-        ui.text(format!("Failed to list levels: {error}"));
+    if let Some(err) = state.error.as_ref() {
+        ui.text(format!("An error occurred while listing levels:"));
+        error_display(ui, err);
         return Task::None;
     }
     
-    let mut open_level;
+    let mut open_level = false;
     
-    let width = {
-        let [width, _] = ui.content_region_avail();
-        width - 14.0
-    };
+    ui.set_cursor_pos([8.0, 8.0]);
+    let width = ui.content_region_avail()[0] - unsafe { ui.style() }.item_spacing[0] - 8.0;
+    
     
     ui.set_next_item_width(width * 0.833);
     if ui.input_text("##Level filter", &mut state.filter)
@@ -63,8 +63,10 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     }
     
     ui.same_line();
-    open_level = ui.button_with_size("Open", [-1.0, 0.0]);
+    open_level |= ui.button_with_size("Open", [-8.0, 0.0]);
     
+    ui.move_cursor_down(4.0);
+    let _list_padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 0.0]));
     open_level |= filtered_list_box(ui,
         "##Level list",
         &mut state.selected_level_index,

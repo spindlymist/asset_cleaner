@@ -1,4 +1,4 @@
-use imgui::{Key, MouseButton, Ui};
+use imgui::{Key, MouseButton, Ui, WindowFlags};
 
 pub fn filtered_list_box<Label, Item, Size>(
     ui: &Ui,
@@ -56,6 +56,7 @@ where
         .menu_bar(false)
         .movable(false)
         .scrollable(true)
+        .flags(WindowFlags::ALWAYS_USE_WINDOW_PADDING)
         .build(|| {
             for item_idx in indices {
                 let item = &list_items[*item_idx];
@@ -182,4 +183,13 @@ where
 
 pub trait ChecklistItem {
     fn label_and_checked(&mut self) -> (&str, &mut bool);
+}
+
+pub fn error_display(ui: &Ui, err: &anyhow::Error) {
+    ui.bullet();
+    ui.text_wrapped(format!("{err}"));
+    for cause in err.chain().skip(1) {
+        ui.bullet();
+        ui.text_wrapped(format!("caused by: {cause}"));
+    }
 }

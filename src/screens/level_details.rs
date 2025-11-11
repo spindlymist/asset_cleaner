@@ -3,7 +3,7 @@ use std::{fs, path::{Path, PathBuf}};
 use imgui::{MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 
-use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box}};
+use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Tab {
@@ -145,6 +145,7 @@ pub struct AssetListItem {
     pub abs_path: PathBuf,
     pub rel_path: PathBuf,
     pub display_name: String,
+    pub error: Option<anyhow::Error>,
     pub image: Option<Image>,
     pub text: Option<String>,
     pub selected: bool,
@@ -194,6 +195,7 @@ impl AssetListItem {
             abs_path: level_dir.join(&rel_path),
             rel_path,
             display_name: file_name,
+            error: None,
             image: None,
             text: None,
             selected: false,
@@ -466,10 +468,27 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
 }
 
 fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListItem) {
-    if item.image.is_none() {
-        // FIXME error handling
-        item.image = Some(textures.create_texture_from_file(&item.abs_path).unwrap());
+    let should_load = match item.error {
+        Some(ref err) => {
+            ui.text("An error occurred while loading the preview:");
+            error_display(ui, err);
+            ui.button("Retry")
+        }
+        None => item.image.is_none()
+    };
+    
+    if should_load {
+        match textures.create_texture_from_file(&item.abs_path) {
+            Ok(val) => {
+                item.image = Some(val);
+                item.error = None;
+            }
+            Err(err) => {
+                item.error = Some(err)
+            }
+        };
     }
+    
     if let Some(image) = &item.image {
         imgui::Image::new(image.texture_id, [image.width, image.height])
             .build(ui);
@@ -529,13 +548,28 @@ fn build_preview_audio(ui: &Ui, item: &AssetListItem, audio_state: &mut AudioSta
 }
 
 fn build_preview_text(ui: &Ui, item: &mut AssetListItem) {
-    if item.text.is_none()
-        && let Ok(text) = fs::read_to_string(&item.abs_path)
-    {
-        item.text = Some(text);
+    let should_load = match item.error {
+        Some(ref err) => {
+            ui.text("An error occurred while loading the preview:");
+            error_display(ui, err);
+            ui.button("Retry")
+        }
+        None => item.text.is_none()
+    };
+    
+    if should_load {
+        match fs::read_to_string(&item.abs_path) {
+            Ok(val) => {
+                item.text = Some(val);
+                item.error = None;
+            }
+            Err(err) => {
+                item.error = Some(err.into())
+            }
+        };
     }
-    if let Some(text) = item.text.as_ref() {
-        let _border = ui.push_style_var(StyleVar::FrameBorderSize(1.0));
+    
+    if let Some(text) = &item.text {
         ui.text_wrapped(text);
     }
 }

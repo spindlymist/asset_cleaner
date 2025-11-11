@@ -3,7 +3,7 @@ use std::{path::PathBuf, thread, sync::mpsc};
 use anyhow::anyhow;
 use imgui::Ui;
 
-use crate::{SharedState, Task, analysis::{AnalysisStatus, UnusedAssets, list_unused_assets}};
+use crate::{SharedState, Task, analysis::{AnalysisStatus, UnusedAssets, list_unused_assets}, widgets::error_display};
 
 pub struct State {
     pub path: PathBuf,
@@ -71,10 +71,11 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
         },
         AnalysisStatus::Aborted => {
             if let Some(err) = state.error.as_ref() {
-                ui.text(format!("Aborted: {err}"));
+                ui.text(format!("An error occurred while processing the level:"));
+                error_display(ui, err);
             }
             else {
-                ui.text("Aborted.");
+                ui.text("An unknown error occurred while processing the level.");
             }
             if ui.button("Return to level select") {
                 task = Task::SelectLevel;

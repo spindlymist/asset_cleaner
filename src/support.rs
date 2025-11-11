@@ -328,11 +328,11 @@ pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<image::RgbaIma
             Err(err) => Err(err)?,
         };
         crate::png_decoder::PngDecoder::new(io::BufReader::new(file))
-            .with_context(|| format!("Error while decoding {path:?}"))?
+            .with_context(|| format!("Error while decoding image {path:?}"))?
     };
 
     let image_dynamic = image::DynamicImage::from_decoder(decoder)
-        .with_context(|| format!("Error while decoding {path:?}"))?;
+        .with_context(|| format!("Error while decoding image {path:?}"))?;
     let image_rgba =
         if let image::DynamicImage::ImageRgba8(image_rgba8) = image_dynamic {
             image_rgba8

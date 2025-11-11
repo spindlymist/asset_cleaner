@@ -13,13 +13,15 @@ mod png_decoder;
 
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context, Result, anyhow};
 use imgui::{Condition, StyleVar, Ui};
 use sdl2::video::Window;
 
 use support::{platform_init, imgui_init, renderer_init, run, Textures};
 use screens::*;
 use analysis::UnusedAssets;
+
+use crate::widgets::error_display;
 
 struct App {
     shared: SharedState,
@@ -31,6 +33,7 @@ struct SharedState {
 }
 
 enum Screen {
+    StartupFailed(anyhow::Error),
     LevelSelect(level_select::State),
     Progress(progress::State),
     LevelDetails(level_details::State),
@@ -50,7 +53,7 @@ fn main() -> Result<()> {
     let renderer = renderer_init(&platform.window, platform.window.size())?;
     let imgui = imgui_init(platform, renderer);
     
-    let mut app = init_app()?;
+    let mut app = init_app();
     run(imgui, |ui, window, textures| {
         let (width, height) = window.size();
         let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
@@ -66,27 +69,53 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn init_app() -> Result<App> {
-    let Some(ks_path) = try_find_ks()? else {
-        // TODO startup error handling
-        anyhow::bail!("KS not found");
+fn init_app() -> App {
+    let ks_path;
+    let startup_error;
+    match try_find_ks() {
+        Ok(Some(val)) => {
+            ks_path = val;
+            startup_error = None;
+        }
+        Ok(None) => {
+            ks_path = PathBuf::from(".");
+            startup_error = Some(anyhow!(
+                "This program must be placed in your KS directory, \
+                or in a subdirectory such as 3rd Party Tools."));
+        }
+        Err(err) => {
+            ks_path = PathBuf::from(".");
+            startup_error = Some(err);
+        }
     };
+
     let worlds_path = ks_path.join("Worlds");
-    
-    let screen_state = level_select::State::new(&worlds_path);
-    let screen = Screen::LevelSelect(screen_state);
+    let screen = match startup_error {
+        Some(err) => {
+            Screen::StartupFailed(err)
+        }
+        None => {
+            let screen_state = level_select::State::new(&worlds_path);
+            Screen::LevelSelect(screen_state)
+        }
+    };
     let shared = SharedState {
         worlds_path,
     };
     
-    Ok(App {
+    App {
         shared,
         screen,
-    })
+    }
 }
 
 fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
     let task = match &mut app.screen {
+        Screen::StartupFailed(err) => {
+            ui.text("Startup failed:");
+            error_display(ui, err);
+            Task::None
+        }
         Screen::LevelSelect(state) => {
             level_select::build_ui(&mut app.shared, state, ui)
         }
@@ -100,9 +129,7 @@ fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
     
     match task {
         Task::SelectLevel => {
-            let ks_path = try_find_ks().unwrap().unwrap(); // FIXME
-            let worlds_path = ks_path.join("Worlds");
-            let screen_state = level_select::State::new(&worlds_path);
+            let screen_state = level_select::State::new(&app.shared.worlds_path);
             app.screen = Screen::LevelSelect(screen_state);
         }
         Task::OpenLevel(path) => {
@@ -120,8 +147,9 @@ fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
 fn try_find_ks() -> Result<Option<PathBuf>> {
     use libks::editions::is_ks_dir;
     
-    let mut maybe_ks_dir = std::env::current_dir()?;
-    
+    let mut maybe_ks_dir = std::env::current_dir()
+        .context("Failed to get current directory")?;
+        
     while !is_ks_dir(&maybe_ks_dir) {
         if !maybe_ks_dir.pop() {
             // Reached root without finding KS
