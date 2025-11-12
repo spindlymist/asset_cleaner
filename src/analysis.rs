@@ -534,13 +534,13 @@ fn simplify_path(rel_path: PathBuf, base: &Path) -> Option<PathBuf> {
 }
 
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum WorldIniSection {
     World,
     CutsceneMusic,
     CustomCharacter,
     CustomObject(u8, u8),
-    Screen(i64, i64),
+    Screen(f64, f64),
 }
 
 fn interpret_world_ini_section(key: &str) -> Option<WorldIniSection> {
@@ -667,7 +667,7 @@ mod test {
     #[test]
     fn interpret_world_ini_section_screen() {
         let key = "x1000y1000";
-        let expected = Some(WorldIniSection::Screen(1000, 1000));
+        let expected = Some(WorldIniSection::Screen(1000.0, 1000.0));
         let actual = interpret_world_ini_section(key);
         assert_eq!(actual, expected);
     }
@@ -675,7 +675,7 @@ mod test {
     #[test]
     fn interpret_world_ini_section_screen_with_negative_coords() {
         let key = "x-1000y-1000";
-        let expected = Some(WorldIniSection::Screen(-1000, -1000));
+        let expected = Some(WorldIniSection::Screen(-1000.0, -1000.0));
         let actual = interpret_world_ini_section(key);
         assert_eq!(actual, expected);
     }
@@ -741,7 +741,7 @@ mod test {
         assert_eq!(actual, expected);
         
         let key = "X1000Y1000";
-        let expected = Some(WorldIniSection::Screen(1000, 1000));
+        let expected = Some(WorldIniSection::Screen(1000.0, 1000.0));
         let actual = interpret_world_ini_section(key);
         assert_eq!(actual, expected);
         

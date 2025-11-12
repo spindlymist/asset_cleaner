@@ -13,7 +13,7 @@ imgui-sdl2-support = "0.13.0"
 imgui-wgpu = { git = "https://github.com/CrushedPixel/imgui-wgpu-rs/", branch = "idx-offset" }
 kira = { version = "0.11.0", default-features = false, features = ["cpal", "ogg"] }
 libc = "0.2.177"
-libks = { path = "../libks/libks" }
+libks = { path = "../libks/libks", features = ["fractional-coords"] }
 mint = "0.5.9"
 natord = "1.0.9"
 png = "0.18.0"
