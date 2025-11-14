@@ -239,7 +239,7 @@ pub fn imgui_init(mut platform: PlatformState, mut renderer: RendererState) -> I
     let default_font = context.fonts().add_font(&[
         imgui::FontSource::TtfData {
             data: include_bytes!("../resources/lucida_sans.ttf"),
-            size_pixels: 24.0,
+            size_pixels: 22.0,
             config: None,
             // config: Some(imgui::FontConfig {
             //     size_pixels: 21.0,

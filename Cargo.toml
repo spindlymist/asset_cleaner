@@ -14,12 +14,14 @@ imgui-wgpu = { git = "https://github.com/CrushedPixel/imgui-wgpu-rs/", branch = 
 kira = { version = "0.11.0", default-features = false, features = ["cpal", "ogg"] }
 libc = "0.2.177"
 libks = { path = "../libks/libks", features = ["fractional-coords"] }
+libks_ini = { path = "../libks/libks_ini" }
 mint = "0.5.9"
 natord = "1.0.9"
 png = "0.18.0"
 pollster = "0.4.0"
 raw-window-handle = "0.6.2"
 regex = { version = "1.12.2", features = ["use_std"] }
+rfd = { version = "0.15.4", default-features = false, features = ["gtk3"] }
 sdl2 = { version = "0.37.0", features = ["raw-window-handle", "bundled", "static-link"] }
 symphonia = { version = "0.5.4", default-features = false, features = ["ogg", "vorbis"] }
 trash = "5.2.5"

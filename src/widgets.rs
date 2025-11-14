@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use imgui::{Key, MouseButton, StyleColor, Ui, WindowFlags};
 
 pub fn filtered_list_box<Label, Item, Size>(
@@ -237,4 +239,37 @@ where
 
     let _button_color = ui.push_style_color(style_color, color_button);
     ui.button_with_size(label, size)
+}
+
+pub struct FileSelection {
+    pub path: PathBuf,
+    pub display: String,
+}
+
+pub fn file_select(ui: &Ui, selection: &mut Option<FileSelection>) -> bool {
+    let mut did_selection_change = false;
+    
+    if ui.button("Browse") {
+        let dialog = rfd::FileDialog::new();
+        if let Some(mut path) = dialog.pick_file() {
+            path.pop();
+            selection.replace(FileSelection {
+                display: path.to_string_lossy().into_owned(),
+                path,
+            });
+            did_selection_change = true;
+        }
+    }
+    
+    ui.same_line();
+    match selection.as_ref() {
+        Some(FileSelection { display, .. }) => {
+            ui.text(display);
+        }
+        None => {
+            ui.text("Please select a file.");
+        }
+    }
+    
+    did_selection_change
 }
