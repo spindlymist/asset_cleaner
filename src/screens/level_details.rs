@@ -340,7 +340,11 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
         if ui.button(format!("Delete checked ({})", n_checked)) {
             ui.open_popup(tab.modal_id_multiple());
         }
-        modal_delete_multiple(ui, tab, assets, textures, n_checked, selected_index);
+        if modal_delete_multiple(ui, tab, assets, textures, n_checked, selected_index)
+            && selected_index.is_none()
+        {
+            state.audio.stop(FADE_OUT_FAST);
+        }
     }
     
     const PREVIEW_MIN_WIDTH: f32 = 600.0 + 20.0;
@@ -380,7 +384,11 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
         if ui.button("Delete this") {
             ui.open_popup(tab.modal_id_single());
         }
-        modal_delete_single(ui, tab, assets, textures, selected_index);
+        if modal_delete_single(ui, tab, assets, textures, selected_index)
+            && selected_index.is_none()
+        {
+            state.audio.stop(FADE_OUT_FAST);
+        }
     }
 
     let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
@@ -540,7 +548,9 @@ fn modal_delete_single(
     assets: &mut Vec<AssetListItem>,
     textures: &mut Textures,
     selected_index: &mut Option<usize>,
-) {
+) -> bool {
+    let mut did_delete_file = false;
+    
     let _modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
     if let Some(_popup) = ui.modal_popup_config(tab.modal_id_single())
         .movable(false)
@@ -549,7 +559,8 @@ fn modal_delete_single(
         .begin_popup()
     {
         let Some(i) = selected_index else {
-            return ui.close_current_popup();
+            ui.close_current_popup();
+            return false;
         };
         let item = &assets[*i];
         
@@ -563,6 +574,7 @@ fn modal_delete_single(
                 }
                 assets.remove(*i);
                 selected_index.take();
+                did_delete_file = true;
             }
             ui.close_current_popup();
         }
@@ -572,6 +584,8 @@ fn modal_delete_single(
             ui.close_current_popup();
         }
     }
+    
+    did_delete_file
 }
 
 fn modal_delete_multiple(
@@ -581,7 +595,9 @@ fn modal_delete_multiple(
     textures: &mut Textures,
     n_checked: usize,
     selected_index: &mut Option<usize>,
-) {
+) -> bool {
+    let mut did_delete_files = false;
+    
     let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
     if let Some(_popup) = ui.modal_popup_config(tab.modal_id_multiple())
         .movable(false)
@@ -590,7 +606,8 @@ fn modal_delete_multiple(
         .begin_popup()
     {
         if n_checked < 1 {
-            return ui.close_current_popup();
+            ui.close_current_popup();
+            return false;
         }
         
         ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
@@ -607,6 +624,7 @@ fn modal_delete_multiple(
                 }
                 match trash::delete(&item.abs_path) {
                     Ok(_) => {
+                        did_delete_files = true;
                         if let Some(ref image) = item.image {
                             textures.delete_texture(image.texture_id);
                         }
@@ -634,6 +652,8 @@ fn modal_delete_multiple(
             ui.close_current_popup();
         }
     }
+    
+    did_delete_files
 }
 
 impl Tab {
