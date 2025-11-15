@@ -151,7 +151,7 @@ pub struct AssetListItem {
     pub image: Option<Image>,
     pub text: Option<String>,
     pub meta: Option<Metadata>,
-    pub selected: bool,
+    pub is_checked: bool,
     pub kind: AssetKind,
 }
 
@@ -172,7 +172,7 @@ pub enum AssetKind {
 
 impl ChecklistItem for AssetListItem {
     fn label_and_checked(&mut self) -> (&str, &mut bool) {
-        (&self.display_name, &mut self.selected)
+        (&self.display_name, &mut self.is_checked)
     }
 }
 
@@ -209,7 +209,7 @@ impl AssetListItem {
             image: None,
             text: None,
             meta: None,
-            selected: false,
+            is_checked: false,
             kind,
         }
     }
@@ -270,31 +270,31 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     
     // Tabs
     let Some(_tab_bar) = ui.tab_bar("##Tabs") else { return Task::None };
-    if let Some(_tab_item) = ui.tab_item(format!("Tilesets ({})", state.tilesets.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Tilesets ({})###Tilesets", state.tilesets.len())) {
         build_tab(ui, state, textures, Tab::Tilesets);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Gradients ({})", state.gradients.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Gradients ({})###Gradients", state.gradients.len())) {
         build_tab(ui, state, textures, Tab::Gradients);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Songs ({})", state.songs.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Songs ({})###Songs", state.songs.len())) {
         build_tab(ui, state, textures, Tab::Songs);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Ambiance ({})", state.ambiance.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Ambiance ({})###Ambiance", state.ambiance.len())) {
         build_tab(ui, state, textures, Tab::Ambiance);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Sounds ({})", state.sounds.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Sounds ({})###Sounds", state.sounds.len())) {
         build_tab(ui, state, textures, Tab::Sounds);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Custom Objects ({})", state.custom_objects.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Custom Objects ({})###Custom Objects", state.custom_objects.len())) {
         build_tab(ui, state, textures, Tab::CustomObjects);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Cutscenes ({})", state.cutscenes.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Cutscenes ({})###Cutscenes", state.cutscenes.len())) {
         build_tab(ui, state, textures, Tab::Cutscenes);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Misc ({})", state.misc.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Misc ({})###Misc", state.misc.len())) {
         build_tab(ui, state, textures, Tab::Misc);
     }
-    if let Some(_tab_item) = ui.tab_item(format!("Ignored ({})", state.ignored.len())) {
+    if let Some(_tab_item) = ui.tab_item(format!("Ignored ({})###Ignored", state.ignored.len())) {
         build_tab(ui, state, textures, Tab::Ignored);
     }
     
@@ -325,57 +325,22 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
     let group_left = ui.begin_group();
     
     if ui.button("Check all") {
-        assets.iter_mut().for_each(|item| item.selected = true);
+        assets.iter_mut().for_each(|item| item.is_checked = true);
     }
     
     ui.same_line();
     if ui.button("Check none") {
-        assets.iter_mut().for_each(|item| item.selected = false);
+        assets.iter_mut().for_each(|item| item.is_checked = false);
     }
     
     ui.same_line();
     {
-        let n_checked = assets.iter().filter(|item| item.selected).count();
+        let n_checked = assets.iter().filter(|item| item.is_checked).count();
         let _disabled = ui.begin_disabled(n_checked == 0);
         if ui.button(format!("Delete checked ({})", n_checked)) {
             ui.open_popup(tab.modal_id_multiple());
         }
-
-        let modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-        ui.modal_popup_config(tab.modal_id_multiple())
-            .movable(false)
-            .resizable(false)
-            .always_auto_resize(true)
-            .build(|| {
-                ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
-                
-                if ui.button("Yes, destroy them all!") {
-                    assets.retain(|item| {
-                        if item.selected {
-                            match trash::delete(&item.abs_path) {
-                                Ok(_) => {
-                                    if let Some(ref image) = item.image {
-                                        textures.delete_texture(image.texture_id);
-                                    }
-                                    false
-                                }
-                                Err(_) => true
-                            }
-                        }
-                        else {
-                            true
-                        }
-                    });
-                    *selected_index = None;
-                    ui.close_current_popup();
-                }
-                
-                ui.same_line();
-                if ui.button("No, don't do it!") {
-                    ui.close_current_popup()
-                }
-            });
-        modal_padding.end();
+        modal_delete_multiple(ui, tab, assets, textures, n_checked, selected_index);
     }
     
     const PREVIEW_MIN_WIDTH: f32 = 600.0 + 20.0;
@@ -415,39 +380,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
         if ui.button("Delete this") {
             ui.open_popup(tab.modal_id_single());
         }
-    }
-
-    {
-        let _modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-        ui.modal_popup_config(tab.modal_id_single())
-            .movable(false)
-            .resizable(false)
-            .always_auto_resize(true)
-            .build(|| {
-                let Some(i) = selected_index else {
-                    return ui.close_current_popup();
-                };
-                let item = &assets[*i];
-                
-                let rel_path = item.rel_path.to_string_lossy();
-                ui.text(format!("Are you sure you want to delete {rel_path}?"));
-                
-                if ui.button("Yes, destroy it!") {
-                    if trash::delete(&item.abs_path).is_ok() {
-                        if let Some(ref image) = item.image {
-                            textures.delete_texture(image.texture_id);
-                        }
-                        assets.remove(*i);
-                        *selected_index = None;
-                    }
-                    ui.close_current_popup();
-                }
-                
-                ui.same_line();
-                if ui.button("No, don't do it!") {
-                    ui.close_current_popup()
-                }
-            });
+        modal_delete_single(ui, tab, assets, textures, selected_index);
     }
 
     let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
@@ -597,6 +530,108 @@ fn build_preview_text(ui: &Ui, item: &mut AssetListItem) {
     
     if let Some(text) = &item.text {
         ui.text_wrapped(text);
+    }
+}
+
+fn modal_delete_single(
+    ui: &Ui,
+    tab: Tab,
+    assets: &mut Vec<AssetListItem>,
+    textures: &mut Textures,
+    selected_index: &mut Option<usize>,
+) {
+    let _modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+    if let Some(_popup) = ui.modal_popup_config(tab.modal_id_single())
+        .movable(false)
+        .resizable(false)
+        .always_auto_resize(true)
+        .begin_popup()
+    {
+        let Some(i) = selected_index else {
+            return ui.close_current_popup();
+        };
+        let item = &assets[*i];
+        
+        let rel_path = item.rel_path.to_string_lossy();
+        ui.text(format!("Are you sure you want to delete {rel_path}?"));
+        
+        if ui.button("Yes, destroy it!") {
+            if trash::delete(&item.abs_path).is_ok() {
+                if let Some(ref image) = item.image {
+                    textures.delete_texture(image.texture_id);
+                }
+                assets.remove(*i);
+                selected_index.take();
+            }
+            ui.close_current_popup();
+        }
+        
+        ui.same_line();
+        if ui.button("No, don't do it!") {
+            ui.close_current_popup();
+        }
+    }
+}
+
+fn modal_delete_multiple(
+    ui: &Ui,
+    tab: Tab,
+    assets: &mut Vec<AssetListItem>,
+    textures: &mut Textures,
+    n_checked: usize,
+    selected_index: &mut Option<usize>,
+) {
+    let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+    if let Some(_popup) = ui.modal_popup_config(tab.modal_id_multiple())
+        .movable(false)
+        .resizable(false)
+        .always_auto_resize(true)
+        .begin_popup()
+    {
+        if n_checked < 1 {
+            return ui.close_current_popup();
+        }
+        
+        ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
+        
+        if ui.button("Yes, destroy them all!") {
+            let previously_selected_path = selected_index
+                .as_ref()
+                .and_then(|i| assets.get(*i))
+                .map(|item| item.rel_path.clone());
+            
+            assets.retain(|item| {
+                if !item.is_checked {
+                    return true;
+                }
+                match trash::delete(&item.abs_path) {
+                    Ok(_) => {
+                        if let Some(ref image) = item.image {
+                            textures.delete_texture(image.texture_id);
+                        }
+                        false
+                    }
+                    Err(_) => true
+                }
+            });
+            
+            // Restore the previous selection if it wasn't deleted
+            if let Some(path) = previously_selected_path
+                && let Some(new_index) = assets.iter().position(|item| item.rel_path == path)
+            {
+                selected_index.replace(new_index);
+            }
+            else {
+                selected_index.take();
+            }
+            
+            ui.close_current_popup();
+        }
+        
+        ui.same_line();
+        if ui.button("No, don't do it!") {
+            ui.close_current_popup();
+        }
     }
 }
 
