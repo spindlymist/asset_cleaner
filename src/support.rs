@@ -8,12 +8,18 @@ use image::{EncodableLayout, imageops};
 const IDLE_FPS: f64 = 60.0;
 const IDLE_FRAME_DURATION_MS: f64 = 1000.0 / IDLE_FPS;
 
+pub struct Extras<'a> {
+    pub window: &'a sdl2::video::Window,
+    pub fonts: &'a Fonts,
+    pub textures: &'a mut Textures<'a>,
+}
+
 pub fn run<F>(imgui: ImguiState, mut build: F) where
-    F: FnMut(&imgui::Ui, &sdl2::video::Window, &mut Textures)
+    F: FnMut(&imgui::Ui, Extras)
 {
     use sdl2::event::{Event, WindowEvent};
     
-    let ImguiState { mut platform, mut renderer, context: mut im_context, .. } = imgui;
+    let ImguiState { mut platform, mut renderer, context: mut im_context, fonts } = imgui;
     let event_pump = &mut platform.event_pump;
     let window = &mut platform.window;
     let im_platform = platform.im_platform.as_mut().expect("Platform should be initialized");
@@ -80,7 +86,12 @@ pub fn run<F>(imgui: ImguiState, mut build: F) where
                 device: &renderer.device,
                 queue: &renderer.queue,
             };
-            build(ui, window, &mut textures);
+            let extras = Extras {
+                window,
+                fonts: &fonts,
+                textures: &mut textures,
+            };
+            build(ui, extras);
         }
         
         // Prepare to render
@@ -228,7 +239,12 @@ pub struct ImguiState {
     pub platform: PlatformState,
     pub renderer: RendererState,
     pub context: imgui::Context,
-    pub default_font: imgui::FontId,
+    pub fonts: Fonts,
+}
+
+pub struct Fonts {
+    pub ui: imgui::FontId,
+    pub mono: imgui::FontId,
 }
 
 pub fn imgui_init(mut platform: PlatformState, mut renderer: RendererState) -> ImguiState {
@@ -236,21 +252,26 @@ pub fn imgui_init(mut platform: PlatformState, mut renderer: RendererState) -> I
     context.set_ini_filename(None);
     context.set_log_filename(None);
     
-    let default_font = context.fonts().add_font(&[
+    let ui_font = context.fonts().add_font(&[
         imgui::FontSource::TtfData {
             data: include_bytes!("../resources/lucida_sans.ttf"),
             size_pixels: 22.0,
             config: None,
-            // config: Some(imgui::FontConfig {
-            //     size_pixels: 21.0,
-            //     pixel_snap_h: true,
-            //     oversample_h: 1,
-            //     oversample_v: 1,
-            //     rasterizer_multiply: 1.0,
-            //     ..imgui::FontConfig::default()
-            // })
         }
     ]);
+    
+    let mono_font = context.fonts().add_font(&[
+        imgui::FontSource::TtfData {
+            data: include_bytes!("../resources/Hack-Regular.ttf"),
+            size_pixels: 16.0,
+            config: None,
+        }
+    ]);
+    
+    let fonts = Fonts {
+        ui: ui_font,
+        mono: mono_font,
+    };
     
     let imgui_platform = imgui_sdl2_support::SdlPlatform::new(&mut context);
     platform.im_platform = Some(imgui_platform);
@@ -266,7 +287,7 @@ pub fn imgui_init(mut platform: PlatformState, mut renderer: RendererState) -> I
         context,
         platform,
         renderer,
-        default_font,
+        fonts,
     }
 }
 

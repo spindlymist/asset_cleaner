@@ -57,8 +57,8 @@ fn main() -> Result<()> {
     let imgui = imgui_init(platform, renderer);
     
     let mut app = init_app();
-    run(imgui, |ui, window, textures| {
-        let (width, height) = window.size();
+    run(imgui, |ui, ex| {
+        let (width, height) = ex.window.size();
         let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
         ui.window("Main")
             .position([0.0, 0.0], Condition::Always)
@@ -66,7 +66,7 @@ fn main() -> Result<()> {
             .title_bar(false)
             .movable(false)
             .resizable(false)
-            .build(|| build_ui(&mut app, ui, window, textures));
+            .build(|| build_ui(&mut app, ui, ex));
     });
 
     Ok(())
@@ -123,7 +123,7 @@ fn init_app() -> App {
     }
 }
 
-fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
+fn build_ui(app: &mut App, ui: &Ui, ex: support::Extras) {
     let _rounding = ui.push_style_var(StyleVar::FrameRounding(2.0));
     
     let task = match &mut app.screen {
@@ -137,7 +137,7 @@ fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
             progress::build_ui(&mut app.shared, state, ui)
         }
         Screen::LevelDetails(state) => {
-            level_details::build_ui(&mut app.shared, state, ui, textures)
+            level_details::build_ui(&mut app.shared, state, ui, ex.textures, ex.fonts)
         }
     };
     
@@ -151,7 +151,7 @@ fn build_ui(app: &mut App, ui: &Ui, _window: &Window, textures: &mut Textures) {
             app.screen = Screen::Progress(screen_state);
         }
         Task::ShowDetails(path, unused_assets) => {
-            let screen_state = level_details::State::new(path, unused_assets, textures);
+            let screen_state = level_details::State::new(path, unused_assets, ex.textures);
             app.screen = Screen::LevelDetails(screen_state);
         }
         Task::None => {}

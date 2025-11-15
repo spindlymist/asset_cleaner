@@ -5,7 +5,7 @@ use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTagKey}, default::formats::OggReader};
 
-use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size}};
+use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Fonts, Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Tab {
@@ -215,7 +215,7 @@ impl AssetListItem {
     }
 }
 
-pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures) -> Task {
+pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures, fonts: &Fonts) -> Task {
     // Level icon
     if let Some(image) = state.level_icon.as_ref() {
         let mut cursor_pos = ui.cursor_pos();
@@ -271,37 +271,37 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     // Tabs
     let Some(_tab_bar) = ui.tab_bar("##Tabs") else { return Task::None };
     if let Some(_tab_item) = ui.tab_item(format!("Tilesets ({})###Tilesets", state.tilesets.len())) {
-        build_tab(ui, state, textures, Tab::Tilesets);
+        build_tab(ui, state, textures, fonts, Tab::Tilesets);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Gradients ({})###Gradients", state.gradients.len())) {
-        build_tab(ui, state, textures, Tab::Gradients);
+        build_tab(ui, state, textures, fonts, Tab::Gradients);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Songs ({})###Songs", state.songs.len())) {
-        build_tab(ui, state, textures, Tab::Songs);
+        build_tab(ui, state, textures, fonts, Tab::Songs);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Ambiance ({})###Ambiance", state.ambiance.len())) {
-        build_tab(ui, state, textures, Tab::Ambiance);
+        build_tab(ui, state, textures, fonts, Tab::Ambiance);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Sounds ({})###Sounds", state.sounds.len())) {
-        build_tab(ui, state, textures, Tab::Sounds);
+        build_tab(ui, state, textures, fonts, Tab::Sounds);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Custom Objects ({})###Custom Objects", state.custom_objects.len())) {
-        build_tab(ui, state, textures, Tab::CustomObjects);
+        build_tab(ui, state, textures, fonts, Tab::CustomObjects);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Cutscenes ({})###Cutscenes", state.cutscenes.len())) {
-        build_tab(ui, state, textures, Tab::Cutscenes);
+        build_tab(ui, state, textures, fonts, Tab::Cutscenes);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Misc ({})###Misc", state.misc.len())) {
-        build_tab(ui, state, textures, Tab::Misc);
+        build_tab(ui, state, textures, fonts, Tab::Misc);
     }
     if let Some(_tab_item) = ui.tab_item(format!("Ignored ({})###Ignored", state.ignored.len())) {
-        build_tab(ui, state, textures, Tab::Ignored);
+        build_tab(ui, state, textures, fonts, Tab::Ignored);
     }
     
     Task::None
 }
 
-fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
+fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts, tab: Tab) {
     if tab != state.prev_tab {
         state.audio.stop(FADE_OUT_SLOW);
         state.prev_tab = tab;
@@ -402,7 +402,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, tab: Tab) {
                     build_preview_audio(ui, item, &mut state.audio);
                 }
                 AssetKind::Text => {
-                    build_preview_text(ui, item);
+                    build_preview_text(ui, item, fonts.mono);
                 }
                 AssetKind::Other => {
                     ui.text("No preview available.");
@@ -506,7 +506,7 @@ fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut Audi
     }
 }
 
-fn build_preview_text(ui: &Ui, item: &mut AssetListItem) {
+fn build_preview_text(ui: &Ui, item: &mut AssetListItem, font: imgui::FontId) {
     let should_load = match item.error {
         Some(ref err) => {
             ui.text("An error occurred while loading the preview:");
@@ -529,7 +529,8 @@ fn build_preview_text(ui: &Ui, item: &mut AssetListItem) {
     }
     
     if let Some(text) = &item.text {
-        ui.text_wrapped(text);
+        let _font = ui.push_font(font);
+        ui.text(text);
     }
 }
 
