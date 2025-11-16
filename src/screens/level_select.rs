@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use imgui::{StyleVar, Ui};
+use imgui::{StyleColor, StyleVar, Ui};
 
 use crate::{SharedState, Task, imgui_ext::ImguiExt, widgets::{error_display, filtered_list_box}};
 
@@ -51,28 +51,35 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     
     let mut open_level = false;
     
-    ui.set_cursor_pos([8.0, 8.0]);
-    let width = ui.content_region_avail()[0] - unsafe { ui.style() }.item_spacing[0] - 8.0;
-    
-    
-    ui.set_next_item_width(width * 0.833);
-    if ui.input_text("##Level filter", &mut state.filter)
-        .build()
     {
-        state.filtered_indices = filter_levels(&state.levels, &state.filter.to_lowercase());
+        ui.set_cursor_pos([8.0, 8.0]);
+        
+        let _spacing = ui.push_style_var(StyleVar::ItemSpacing([4.0, 1.0]));
+        let mut hint_color = ui.style_color(StyleColor::Text);
+        hint_color[3] *= 0.25;
+        let _hint_color_token = ui.push_style_color(StyleColor::TextDisabled, hint_color);
+        
+        let full_width = ui.content_region_avail()[0] - 8.0;
+        let input_width = full_width * (10.0/12.0) - unsafe { ui.style().item_spacing[0] / 2.0 };
+        ui.set_next_item_width(input_width);
+        if ui.input_text("##Level filter", &mut state.filter)
+            .hint("Filter levels")
+            .build()
+        {
+            state.filtered_indices = filter_levels(&state.levels, &state.filter.to_lowercase());
+        }
+
+        ui.same_line();
+        open_level |= ui.button_with_size("Open", [-8.0, 0.0]);
     }
     
-    ui.same_line();
-    open_level |= ui.button_with_size("Open", [-8.0, 0.0]);
-    
-    ui.move_cursor_down(4.0);
-    let _list_padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 0.0]));
+    let _list_padding = ui.push_style_var(StyleVar::WindowPadding([12.0, 10.0]));
     open_level |= filtered_list_box(ui,
         "##Level list",
         &mut state.selected_level_index,
         &state.levels,
         &state.filtered_indices,
-        [-1.0, -1.0]);
+        [-8.0, -1.0]);
     
     if open_level
         && let Some(index) = state.selected_level_index
@@ -95,7 +102,7 @@ fn list_levels(path: &Path) -> anyhow::Result<Vec<LevelListItem>> {
         }
         
         let level_path = entry.path();
-        let level_name = entry.file_name().to_string_lossy().to_string();
+        let level_name = entry.file_name().to_string_lossy().into_owned();
         
         let map_path = level_path.join("Map.bin");
         let ini_path = level_path.join("World.ini");

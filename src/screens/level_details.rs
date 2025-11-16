@@ -92,7 +92,7 @@ impl State {
             .unwrap_or(None);
         
         Self {
-            level_name: level_dir.file_name().unwrap().to_string_lossy().to_string(),
+            level_name: level_dir.file_name().unwrap().to_string_lossy().into_owned(),
             level_dir,
             level_icon,
             tilesets,
@@ -171,7 +171,11 @@ pub enum AssetKind {
 }
 
 impl ChecklistItem for AssetListItem {
-    fn label_and_checked(&mut self) -> (&str, &mut bool) {
+    fn label(&self) -> &str {
+        &self.display_name
+    }
+    
+    fn label_and_is_checked_mut(&mut self) -> (&str, &mut bool) {
         (&self.display_name, &mut self.is_checked)
     }
 }
@@ -194,17 +198,16 @@ impl AssetListItem {
                     .skip(1)
                     .collect::<PathBuf>()
                     .to_string_lossy()
-                    .to_string()
+                    .into_owned()
             }
             else {
-                rel_path.to_string_lossy()
-                    .to_string()
+                rel_path.to_string_lossy().into_owned()
             };
         
         Self {
             abs_path: level_dir.join(&rel_path),
-            rel_path,
             display_name: file_name,
+            rel_path,
             error: None,
             image: None,
             text: None,
@@ -216,6 +219,8 @@ impl AssetListItem {
 }
 
 pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures: &mut Textures, fonts: &Fonts) -> Task {
+    ui.move_cursor_down(8.0);
+    
     // Level icon
     if let Some(image) = state.level_icon.as_ref() {
         let mut cursor_pos = ui.cursor_pos();
@@ -248,7 +253,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
         let cursor_pos = ui.cursor_pos();
         let [width_item, _] = ui.calc_text_size("Go Back");
         let [width_avail, _] = ui.content_region_avail();
-        ui.move_cursor_right(width_avail - width_item);
+        ui.move_cursor_right(width_avail - 8.0 - width_item);
         
         if ui.button("Go Back") {
             for image in state.tilesets.iter_mut()
@@ -267,6 +272,8 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     
     // Level title
     ui.text_centered(&state.level_name);
+    
+    ui.move_cursor_down(8.0);
     
     // Tabs
     let Some(_tab_bar) = ui.tab_bar("##Tabs") else { return Task::None };
@@ -390,18 +397,22 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
             state.audio.stop(FADE_OUT_FAST);
         }
     }
-
-    let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
-    let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-    ui.child_window("Preview")
-        .size([-1.0, -1.0])
-        .menu_bar(false)
-        .movable(false)
-        .scrollable(true)
-        .flags(WindowFlags::HORIZONTAL_SCROLLBAR | WindowFlags::ALWAYS_USE_WINDOW_PADDING)
-        .build(|| {
-            let Some(i) = selected_index else { return };
-            let item = &mut assets[*i];
+    
+    {
+        let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
+        let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
+        let _preview_window = ui.child_window("Preview")
+            .size([-1.0, -1.0])
+            .menu_bar(false)
+            .movable(false)
+            .scrollable(true)
+            .flags(WindowFlags::HORIZONTAL_SCROLLBAR | WindowFlags::ALWAYS_USE_WINDOW_PADDING)
+            .begin();
+        
+        if let Some(item) = selected_index
+            .as_ref()
+            .and_then(|i| assets.get_mut(*i))
+        {
             match item.kind {
                 AssetKind::Image => {
                     build_preview_image(ui, textures, item);
@@ -416,7 +427,8 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
                     ui.text("No preview available.");
                 }
             }
-        });
+        }
+    }
 }
 
 fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListItem) {
@@ -442,45 +454,15 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
     }
     
     if let Some(image) = &item.image {
+        if image.is_downscaled {
+            ui.text("Preview is downscaled.");
+        }
         imgui::Image::new(image.texture_id, [image.width, image.height])
             .build(ui);
     }
 }
 
 fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut AudioState) {    
-    let size = [168.0, 48.0];
-    
-    if audio_state.is_playing() {
-        let t = audio_state.stream_handle
-            .as_ref()
-            .map(|handle| handle.position() / audio_state.duration)
-            .unwrap_or(1.0) as f32;
-        if progress_button_with_size(ui, "Stop", size, t) {
-            audio_state.stop(FADE_OUT_FAST);
-        }
-    }
-    else if ui.button_with_size("Play", size) {
-        audio_state.stop(FADE_OUT_FAST);
-        match StreamingSoundData::from_file(&item.abs_path) {
-            Ok(data) => {
-                let duration = data.duration().as_secs_f64();
-                match audio_state.audio_manager.play(data) {
-                    Ok(handle) => {
-                        audio_state.stream_handle = Some(handle);
-                        audio_state.duration = duration;
-                        item.error = None;
-                    }
-                    Err(err) => {
-                        item.error = Some(anyhow::Error::new(err).context("Failed to play sound."));
-                    }
-                };
-            }
-            Err(err) => {
-                item.error = Some(anyhow::Error::new(err).context("Failed to load sound."));
-            }
-        };
-    }
-    
     if item.meta.is_none() {
         item.meta = Some(metadata_from_file(&item.abs_path).unwrap_or_default());
     }
@@ -506,6 +488,39 @@ fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut Audi
             ui.table_next_column();
             ui.text(&meta.duration);
         }
+        ui.move_cursor_down(4.0);
+    }
+    
+    let play_button_size = [168.0, 48.0];
+    if audio_state.is_playing() {
+        let t = audio_state.stream_handle
+            .as_ref()
+            .map(|handle| handle.position() / audio_state.duration)
+            .unwrap_or(1.0) as f32;
+        if progress_button_with_size(ui, "Stop", play_button_size, t) {
+            audio_state.stop(FADE_OUT_FAST);
+        }
+    }
+    else if ui.button_with_size("Play", play_button_size) {
+        audio_state.stop(FADE_OUT_FAST);
+        match StreamingSoundData::from_file(&item.abs_path) {
+            Ok(data) => {
+                let duration = data.duration().as_secs_f64();
+                match audio_state.audio_manager.play(data) {
+                    Ok(handle) => {
+                        audio_state.stream_handle = Some(handle);
+                        audio_state.duration = duration;
+                        item.error = None;
+                    }
+                    Err(err) => {
+                        item.error = Some(anyhow::Error::new(err).context("Failed to play sound."));
+                    }
+                };
+            }
+            Err(err) => {
+                item.error = Some(anyhow::Error::new(err).context("Failed to load sound."));
+            }
+        };
     }
     
     if let Some(ref err) = item.error {

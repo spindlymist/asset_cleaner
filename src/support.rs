@@ -301,12 +301,13 @@ pub struct Image {
     pub texture_id: imgui::TextureId,
     pub width: f32,
     pub height: f32,
+    pub is_downscaled: bool,
 }
 
 impl<'a> Textures<'a> {
     pub fn create_texture_from_file(&mut self, path: &Path) -> Result<Image> {
         let max_size = self.device.limits().max_texture_dimension_2d;
-        let image = load_and_scale_image(path, max_size)?;
+        let (image, is_downscaled) = load_and_scale_image(path, max_size)?;
         let width = image.width();
         let height = image.height();
         let raw_bytes = image.as_bytes();
@@ -329,6 +330,7 @@ impl<'a> Textures<'a> {
             texture_id,
             width: width as f32,
             height: height as f32,
+            is_downscaled,
         })
     }
     
@@ -339,7 +341,7 @@ impl<'a> Textures<'a> {
     }
 }
 
-pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<image::RgbaImage> {
+pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<(image::RgbaImage, bool)> {
     let decoder = {
         let file = match fs::OpenOptions::new().read(true).open(path) {
             Ok(file) => file,
@@ -365,7 +367,7 @@ pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<image::RgbaIma
     let height = image_rgba.height();
     
     if width <= max_size && height <= max_size {
-        Ok(image_rgba)
+        Ok((image_rgba, false))
     }
     else {
         let (new_width, new_height) =
@@ -384,7 +386,7 @@ pub fn load_and_scale_image(path: &Path, max_size: u32) -> Result<image::RgbaIma
                 )
             };
         let image_scaled = imageops::resize(&image_rgba, new_width, new_height, imageops::FilterType::CatmullRom);
-        
-        Ok(image_scaled)
+
+        Ok((image_scaled, true))
     }
 }

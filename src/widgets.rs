@@ -53,37 +53,36 @@ where
         show_selected = true;
     }
     
-    ui.child_window(label)
+    let _window = ui.child_window(label)
         .size(size)
-        .menu_bar(false)
         .movable(false)
         .scrollable(true)
         .flags(WindowFlags::ALWAYS_USE_WINDOW_PADDING)
-        .build(|| {
-            for item_idx in indices {
-                let item = &list_items[*item_idx];
-                let is_selected = *current_index == Some(*item_idx);
-                
-                if is_selected && show_selected {
-                    ui.set_scroll_here_y();
-                }
-                
-                if ui.selectable_config(item)
-                    .allow_double_click(true)
-                    .selected(is_selected)
-                    .build()
-                {
-                    if ui.is_mouse_double_clicked(MouseButton::Left) {
-                        double_click = true;
-                    }
-                    *current_index = Some(*item_idx);
-                    found_index = true;
-                }
-                
-                found_index |= is_selected;
-            }
-        });
+        .begin();
+    
+    for item_idx in indices {
+        let item = &list_items[*item_idx];
+        let is_selected = *current_index == Some(*item_idx);
         
+        if is_selected && show_selected {
+            ui.set_scroll_here_y();
+        }
+        
+        if ui.selectable_config(item)
+            .allow_double_click(true)
+            .selected(is_selected)
+            .build()
+        {
+            if ui.is_mouse_double_clicked(MouseButton::Left) {
+                double_click = true;
+            }
+            *current_index = Some(*item_idx);
+            found_index = true;
+        }
+        
+        found_index |= is_selected;
+    }
+    
     if !found_index {
         *current_index = None;
     }
@@ -138,53 +137,60 @@ where
         show_selected = true;
     }
     
-    ui.child_window(label)
+    let _window = ui.child_window(label)
         .size(size)
-        .menu_bar(false)
         .movable(false)
         .scrollable(true)
-        .build(|| {
-            let _frame_padding = ui.push_style_var(imgui::StyleVar::FramePadding([0.0, 0.0]));
-            
-            let [content_width, _] = ui.content_region_avail();
-            let [inner_spacing, _] = unsafe { ui.style().item_inner_spacing };
-            let frame_height = ui.frame_height();
-            let selectable_x = frame_height + inner_spacing + 1.0;
-            let selectable_width = content_width - selectable_x;
-            let selectable_height = ui.text_line_height();
-            
-            for (i, item) in items.iter_mut().enumerate() {     
-                let (label, checked) = item.label_and_checked();
-                let is_selected = *current_index == Some(i);
-                
-                if is_selected && show_selected {
-                    ui.set_scroll_here_y();
-                }
-                          
-                let cursor_pos_initial = ui.cursor_pos();
-                ui.set_cursor_pos([cursor_pos_initial[0] + selectable_x, cursor_pos_initial[1]]);
-                if ui.selectable_config(format!("##{}", label))
-                    .size([selectable_width, selectable_height])
-                    .allow_double_click(true)
-                    .selected(is_selected)
-                    .build()
-                {
-                    if ui.is_mouse_double_clicked(MouseButton::Left) {
-                        double_click = true;
-                    }
-                    *current_index = Some(i);
-                }
-                
-                ui.set_cursor_pos(cursor_pos_initial);
-                ui.checkbox(label, checked);
+        .flags(WindowFlags::ALWAYS_USE_WINDOW_PADDING | WindowFlags::HORIZONTAL_SCROLLBAR)
+        .begin();
+    
+    let _frame_padding = ui.push_style_var(imgui::StyleVar::FramePadding([0.0, 0.0]));
+    
+    let max_item_width = items.iter_mut()
+        .map(|item| {
+            ui.calc_text_size(item.label())[0]
+        })
+        .fold(f32::NEG_INFINITY, f32::max);
+    
+    let content_width = ui.content_region_avail()[0];
+    let inner_spacing_x = unsafe { ui.style().item_inner_spacing[0] };
+    let frame_height = ui.frame_height();
+    let selectable_x = frame_height + inner_spacing_x + 2.0;
+    let selectable_width = f32::max(max_item_width, content_width - selectable_x);
+    let selectable_height = ui.text_line_height();
+    
+    for (i, item) in items.iter_mut().enumerate() {
+        let (label, checked) = item.label_and_is_checked_mut();
+        let is_selected = *current_index == Some(i);
+        
+        if is_selected && show_selected {
+            ui.set_scroll_here_y();
+        }
+
+        let cursor_pos_initial = ui.cursor_pos();
+        ui.set_cursor_pos([cursor_pos_initial[0] + selectable_x, cursor_pos_initial[1]]);
+        if ui.selectable_config(format!("##{}", label))
+            .size([selectable_width, selectable_height])
+            .allow_double_click(true)
+            .selected(is_selected)
+            .build()
+        {
+            if ui.is_mouse_double_clicked(MouseButton::Left) {
+                double_click = true;
             }
-        });
+            *current_index = Some(i);
+        }
+        
+        ui.set_cursor_pos(cursor_pos_initial);
+        ui.checkbox(label, checked);
+    }
     
     double_click
 }
 
 pub trait ChecklistItem {
-    fn label_and_checked(&mut self) -> (&str, &mut bool);
+    fn label(&self) -> &str;
+    fn label_and_is_checked_mut(&mut self) -> (&str, &mut bool);
 }
 
 pub fn error_display(ui: &Ui, err: &anyhow::Error) {
