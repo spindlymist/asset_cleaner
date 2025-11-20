@@ -254,16 +254,16 @@ pub fn imgui_init(mut platform: PlatformState, mut renderer: RendererState) -> I
     
     let ui_font = context.fonts().add_font(&[
         imgui::FontSource::TtfData {
-            data: include_bytes!("../resources/lucida_sans.ttf"),
-            size_pixels: 22.0,
+            data: include_bytes!("../resources/FiraSans-Regular.ttf"),
+            size_pixels: 19.0,
             config: None,
         }
     ]);
     
     let mono_font = context.fonts().add_font(&[
         imgui::FontSource::TtfData {
-            data: include_bytes!("../resources/Hack-Regular.ttf"),
-            size_pixels: 16.0,
+            data: include_bytes!("../resources/FiraCode-Regular.ttf"),
+            size_pixels: 19.0,
             config: None,
         }
     ]);
