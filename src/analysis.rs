@@ -540,7 +540,7 @@ enum WorldIniSection {
     CutsceneMusic,
     CustomCharacter,
     CustomObject(u8, u8),
-    Screen(f64, f64),
+    Screen(f32, f32),
 }
 
 fn interpret_world_ini_section(key: &str) -> Option<WorldIniSection> {
