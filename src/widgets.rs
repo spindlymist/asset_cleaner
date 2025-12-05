@@ -1,6 +1,15 @@
 use std::path::PathBuf;
 
+use imgui_app::{imgui, ImguiCursorExt};
 use imgui::{Key, MouseButton, StyleColor, Ui, WindowFlags};
+
+pub fn text_centered<T: AsRef<str>>(ui: &Ui, text: T) {
+    let [width_avail, _] = ui.content_region_avail();
+    let [width_text, _] = ui.calc_text_size(&text);
+    let x = (width_avail - width_text) / 2.0;
+    ui.set_cursor_x(x);
+    ui.text(text);
+}
 
 pub fn filtered_list_box<Label, Item, Size>(
     ui: &Ui,

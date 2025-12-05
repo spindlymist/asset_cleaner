@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, Context, Error};
+use imgui_app::imgui;
 use imgui::{StyleVar, Ui, WindowFlags};
 use libks::editions::is_ks_dir;
 

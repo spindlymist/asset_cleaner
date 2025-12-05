@@ -1,6 +1,5 @@
 //#![windows_subsystem = "windows"]
 
-mod support;
 mod widgets;
 mod analysis;
 mod config;
@@ -10,16 +9,13 @@ mod screens {
     pub mod level_details;
     pub mod level_select;
 }
-mod imgui_ext;
-mod png_decoder;
 
 use std::path::PathBuf;
 
 use anyhow::Result;
+use imgui_app::{imgui, platform_init, imgui_init, renderer_init, run};
 use imgui::{Condition, StyleVar, Ui};
-use sdl2::video::Window;
 
-use support::{platform_init, imgui_init, renderer_init, run, Textures};
 use screens::*;
 use analysis::UnusedAssets;
 
@@ -123,7 +119,7 @@ fn init_app() -> App {
     }
 }
 
-fn build_ui(app: &mut App, ui: &Ui, ex: support::Extras) {
+fn build_ui(app: &mut App, ui: &Ui, ex: imgui_app::Extras) {
     let _rounding = ui.push_style_var(StyleVar::FrameRounding(2.0));
     
     let task = match &mut app.screen {

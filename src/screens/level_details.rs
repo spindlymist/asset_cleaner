@@ -1,11 +1,12 @@
 use std::{fs::{self, File}, path::{Path, PathBuf}, time::Duration};
 
 use anyhow::Result;
+use imgui_app::{imgui, Fonts, Textures, Texture, ImguiCursorExt};
 use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTagKey}, default::formats::OggReader};
 
-use crate::{SharedState, Task, analysis::UnusedAssets, imgui_ext::ImguiExt, support::{Fonts, Image, Textures}, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size}};
+use crate::{SharedState, Task, analysis::UnusedAssets, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size, text_centered}};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Tab {
@@ -24,7 +25,7 @@ const N_TABS: usize = Tab::Ignored as usize + 1;
 pub struct State {
     pub level_dir: PathBuf,
     pub level_name: String,
-    pub level_icon: Option<Image>,
+    pub level_icon: Option<Texture>,
     pub tilesets: Vec<AssetListItem>,
     pub gradients: Vec<AssetListItem>,
     pub songs: Vec<AssetListItem>,
@@ -148,7 +149,7 @@ pub struct AssetListItem {
     pub rel_path: PathBuf,
     pub display_name: String,
     pub error: Option<anyhow::Error>,
-    pub image: Option<Image>,
+    pub image: Option<Texture>,
     pub text: Option<String>,
     pub meta: Option<Metadata>,
     pub is_checked: bool,
@@ -271,7 +272,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     }
     
     // Level title
-    ui.text_centered(&state.level_name);
+    text_centered(ui, &state.level_name);
     
     ui.move_cursor_down(8.0);
     
@@ -448,7 +449,7 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
                 item.error = None;
             }
             Err(err) => {
-                item.error = Some(err)
+                item.error = Some(err.into())
             }
         };
     }

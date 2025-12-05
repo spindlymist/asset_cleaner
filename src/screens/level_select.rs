@@ -1,8 +1,9 @@
 use std::{fs, path::Path};
 
+use imgui_app::imgui;
 use imgui::{StyleColor, StyleVar, Ui};
 
-use crate::{SharedState, Task, imgui_ext::ImguiExt, widgets::{error_display, filtered_list_box}};
+use crate::{SharedState, Task, widgets::{error_display, filtered_list_box}};
 
 pub struct State {
     pub error: Option<anyhow::Error>,
