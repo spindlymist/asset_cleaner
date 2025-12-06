@@ -248,13 +248,14 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     
     // Back button
     {
-        let _padding = ui.push_style_var(StyleVar::FramePadding([0.0, 0.0]));
         let _button_color = ui.push_style_color(StyleColor::Button, [0.0, 0.0, 0.0, 0.0]);
         
+        let frame_padding = unsafe { ui.style().frame_padding };
         let cursor_pos = ui.cursor_pos();
-        let [width_item, _] = ui.calc_text_size("Go Back");
-        let [width_avail, _] = ui.content_region_avail();
-        ui.move_cursor_right(width_avail - 8.0 - width_item);
+        let width_text = ui.calc_text_size("Go Back")[0];
+        let width_padding = frame_padding[0] * 2.0;
+        let width_avail = ui.content_region_avail()[0];
+        ui.move_cursor([width_avail - 8.0 - width_text - width_padding, -frame_padding[1]]);
         
         if ui.button("Go Back") {
             for image in state.tilesets.iter_mut()
@@ -769,9 +770,9 @@ fn metadata_from_file(path: &Path) -> Result<Metadata> {
     }
     
     Ok(Metadata {
-        artist: artist.unwrap_or("".to_owned()),
-        title: title.unwrap_or("".to_owned()),
-        duration: duration.unwrap_or("".to_owned()),
+        artist: artist.unwrap_or_default(),
+        title: title.unwrap_or_default(),
+        duration: duration.unwrap_or_default(),
     })
 }
 

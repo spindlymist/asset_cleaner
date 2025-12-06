@@ -25,7 +25,7 @@ impl State {
             error,
             levels,
             filtered_indices,
-            filter: String::from(""),
+            filter: String::new(),
             selected_level_index: Some(0),
         }
     }
