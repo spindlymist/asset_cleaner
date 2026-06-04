@@ -1,6 +1,7 @@
 use std::{collections::{HashMap, HashSet}, ops::RangeBounds, path::{Path, PathBuf}, str::FromStr, sync::mpsc};
 
 use anyhow::{Context, Result};
+use libks::map_bin::LayerData;
 use walkdir::WalkDir;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -18,6 +19,8 @@ pub struct IndexedAssets {
     pub gradients: [bool; 256],
     pub songs: [bool; 256],
     pub ambiance: [bool; 256],
+    pub custom_objects: [bool; 256],
+    pub custom_objects_b: [bool; 256],
 }
 
 pub struct NamedAssets {
@@ -242,15 +245,28 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
     let mut gradients = [false; 256];
     let mut songs = [false; 256];
     let mut ambiance = [false; 256];
+    let mut custom_objects = [false; 256];
+    let mut custom_objects_b = [false; 256];
     
     for screen in screens {
         let mut uses_tileset_a = false;
         let mut uses_tileset_b = false;
         
-        for layer in &screen.layers[..=3] {
-            for tile in layer.0 {
+        for LayerData(layer) in &screen.layers[..=3] {
+            for tile in layer {
                 uses_tileset_a |= tile.0 == 0 && tile.1 > 0;
                 uses_tileset_b |= tile.0 == 1 && tile.1 > 0;
+            }
+        }
+        
+        for LayerData(layer) in &screen.layers[4..] {
+            for tile in layer {
+                if tile.1 == 0 { continue; }
+                match tile.0 {
+                    255 => custom_objects[tile.1 as usize] = true,
+                    254 => custom_objects_b[tile.1 as usize] = true,
+                    _ => {}
+                };
             }
         }
         
@@ -267,6 +283,8 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
         gradients,
         songs,
         ambiance,
+        custom_objects,
+        custom_objects_b
     })
 }
 
@@ -392,7 +410,15 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
                     custom_objects.insert(value.to_owned());
                 }
             }
-            WorldIniSection::CustomObject(..) => {
+            WorldIniSection::CustomObject(bank, index) => {
+                let object_appears_in_level = match bank {
+                    255 => indexed_assets.custom_objects[index as usize],
+                    254 => indexed_assets.custom_objects_b[index as usize],
+                    _ => false,
+                };
+                if !object_appears_in_level {
+                    continue;
+                }
                 if let Some(value) = section.get("Image") {
                     custom_objects.insert(value.to_owned());
                 }
