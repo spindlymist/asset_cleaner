@@ -26,6 +26,7 @@ pub struct NamedAssets {
     pub sounds: Vec<PathBuf>,
     pub songs: Vec<PathBuf>,
     pub ambiance: Vec<PathBuf>,
+    pub savegames: Vec<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -314,12 +315,18 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
         let path = PathBuf::from(format!("ambiance/ambi{s}.ogg"));
         Some(path)
     };
+    let normalize_savegame = |mut s: String| -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("savegame{s}.ini"));
+        simplify_path(path, world_path)
+    };
     
     let mut cutscenes = HashSet::new();
     let mut custom_objects = HashSet::new();
     let mut sounds = HashSet::new();
     let mut songs = HashSet::new();
     let mut ambiance = HashSet::new();
+    let mut savegames = HashSet::new();
     let ini_path = world_path.join("World.ini");
     let ini = libks::world_ini::load_ini(&ini_path)
         .with_context(|| format!("Failed to parse ini at {:?}", ini_path))?;
@@ -341,6 +348,27 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
                 }
                 if let Some(value) = section.get("ShiftCutscene(C)") {
                     cutscenes.insert(value.to_owned());
+                }
+                if let Some(value) = section.get("ShiftSave(A)")
+                    && !value.is_empty()
+                    && !value.eq_ignore_ascii_case("true")
+                    && !value.eq_ignore_ascii_case("false")
+                {
+                    savegames.insert(value.to_owned());
+                }
+                if let Some(value) = section.get("ShiftSave(B)")
+                    && !value.is_empty()
+                    && !value.eq_ignore_ascii_case("true")
+                    && !value.eq_ignore_ascii_case("false")
+                {
+                    savegames.insert(value.to_owned());
+                }
+                if let Some(value) = section.get("ShiftSave(C)")
+                    && !value.is_empty()
+                    && !value.eq_ignore_ascii_case("true")
+                    && !value.eq_ignore_ascii_case("false")
+                {
+                    savegames.insert(value.to_owned());
                 }
                 if let Some(value) = section.get("ShiftSound(A)") {
                     sounds.insert(value.to_owned());
@@ -474,6 +502,9 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
     let ambiance_normalized: Vec<_> = ambiance.into_iter()
         .filter_map(normalize_ambiance)
         .collect();
+    let savegames_normalized: Vec<_> = savegames.into_iter()
+        .filter_map(normalize_savegame)
+        .collect();
     
     Ok(NamedAssets {
         cutscenes: cutscenes_normalized,
@@ -481,6 +512,7 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
         sounds: sounds_normalized,
         songs: songs_normalized,
         ambiance: ambiance_normalized,
+        savegames: savegames_normalized,
     })
 }
 
@@ -492,6 +524,7 @@ fn remove_named_assets(assets: &mut HashMap<PathBuf, PathBuf>, ini_assets: &Name
         .chain(ini_assets.sounds.iter())
         .chain(ini_assets.songs.iter())
         .chain(ini_assets.ambiance.iter())
+        .chain(ini_assets.savegames.iter())
     {
         assets.remove(path);
     }
