@@ -48,7 +48,7 @@ enum Task {
 fn main() -> Result<()> {
     env_logger::init();
 
-    let platform = platform_init("Don't forget to update the window title", (1024, 768))?;
+    let platform = platform_init("Asset Cleaner", (1024, 768))?;
     let renderer = renderer_init(&platform.window, platform.window.size())?;
     let imgui = imgui_init(platform, renderer);
     
