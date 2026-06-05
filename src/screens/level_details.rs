@@ -225,24 +225,27 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     
     // Level icon
     if let Some(image) = state.level_icon.as_ref() {
+        const ICON_WIDTH: f32 = 30.0;
+        const ICON_HEIGHT: f32 = 30.0;
+        
         let mut cursor_pos = ui.cursor_pos();
         let [text_width, text_height] = ui.calc_text_size(&state.level_name);
         let [spacing_x, _] = unsafe { ui.style().item_spacing };
         let [avail_width, _] = ui.content_region_avail();
-        let x_offset = (avail_width - text_width) / 2.0 - spacing_x - 30.0;
+        let x_offset = f32::round((avail_width - text_width) / 2.0) - spacing_x - ICON_WIDTH;
         ui.move_cursor_right(x_offset);
         
         let top_left = ui.cursor_screen_pos();
-        let bottom_right = [top_left[0] + 30.0, top_left[1] + 30.0];
+        let bottom_right = [top_left[0] + ICON_WIDTH, top_left[1] + ICON_HEIGHT];
         ui.get_window_draw_list()
             .add_rect(top_left, bottom_right, [235.0, 235.0, 235.0, 1.0])
             .filled(true)
             .build();
         
-        imgui::Image::new(image.texture_id, [30.0, 30.0])
+        imgui::Image::new(image.texture_id, [ICON_WIDTH, ICON_HEIGHT])
             .build(ui);
         
-        let y_offset = (30.0 - text_height) / 2.0;
+        let y_offset = f32::round((ICON_HEIGHT - text_height) / 2.0);
         cursor_pos[1] += y_offset;
         ui.set_cursor_pos(cursor_pos);
     }
