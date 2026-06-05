@@ -424,40 +424,12 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
                 }
             }
             WorldIniSection::CutsceneMusic => {
-                for value in section.iter()
-                    .map(|(_, value)| value.to_ascii_lowercase())
-                {
-                    if let Some(value) = value.strip_suffix('a') {
-                        if let Ok(index) = str::parse::<u8>(value) {
-                            indexed_assets.ambiance[index as usize] = true;
-                        }
-                        else if let Ok(index) = str::parse::<i32>(value) {
-                            if index <= i32::MIN + 1 || index == i32::MAX {
-                                ambiance.insert(mmf_f32_to_string(index as f32));
-                            }
-                            else {
-                                ambiance.insert(index.to_string());
-                            }
-                        }
-                        else if let Ok(index) = str::parse::<f32>(value) {
-                            ambiance.insert(mmf_f32_to_string(index));
-                        }
-                    }
-                    else {
-                        if let Ok(index) = str::parse::<u8>(&value) {
-                            indexed_assets.songs[index as usize] = true;
-                        }
-                        else if let Ok(index) = str::parse::<i32>(&value) {
-                            if index <= i32::MIN + 1 || index == i32::MAX {
-                                songs.insert(mmf_f32_to_string(index as f32));
-                            }
-                            else {
-                                songs.insert(index.to_string());
-                            }
-                        }
-                        else if let Ok(index) = str::parse::<f32>(&value) {
-                            songs.insert(mmf_f32_to_string(index));
-                        }
+                for (_, value) in section.iter() {
+                    match parse_cutscene_music_index(value) {
+                        CutsceneMusic::SongIndexed(i) => { indexed_assets.songs[i as usize] = true; }
+                        CutsceneMusic::AmbiIndexed(i) => { indexed_assets.ambiance[i as usize] = true; }
+                        CutsceneMusic::SongNamed(s)   => { songs.insert(s); }
+                        CutsceneMusic::AmbiNamed(s)   => { ambiance.insert(s); }
                     }
                 }
             }
@@ -634,6 +606,36 @@ fn interpret_world_ini_section(key: &str) -> Option<WorldIniSection> {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum CutsceneMusic {
+    SongIndexed(u8),
+    SongNamed(String),
+    AmbiIndexed(u8),
+    AmbiNamed(String),
+}
+
+fn parse_cutscene_music_index(s: &str) -> CutsceneMusic {
+    let is_ambi = s.ends_with(['a', 'A']);
+    match mmf_string_to_number(s) {
+        // If it's an int, we just need to determine if it's a valid index (0-255)
+        Number::Int(val) => match u8::try_from(val) {
+            Ok(val) if is_ambi => CutsceneMusic::AmbiIndexed(val),
+            Ok(val)            => CutsceneMusic::SongIndexed(val),
+            Err(_)  if is_ambi => CutsceneMusic::AmbiNamed(val.to_string()),
+            Err(_)             => CutsceneMusic::SongNamed(val.to_string()),
+        }
+        // If it's a float, we need to determine if it will become a valid index when converted back to string
+        Number::Float(val) => {
+            let val_string = mmf_f32_to_string(val);
+            match i32::from_str(&val_string).map(u8::try_from) { // A little hacky but whatever, it works
+                Ok(Ok(val)) if is_ambi => CutsceneMusic::AmbiIndexed(val),
+                Ok(Ok(val))            => CutsceneMusic::SongIndexed(val),
+                _           if is_ambi => CutsceneMusic::AmbiNamed(val_string),
+                _                      => CutsceneMusic::SongNamed(val_string),
+            }
+        }
+    }
+}
 
 mod c {
     unsafe extern "C" {
@@ -661,11 +663,106 @@ pub fn mmf_f32_to_string(f: f32) -> String {
     }
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))]
+enum Number {
+    Int(i32),
+    Float(f32),
+}
+
+fn mmf_string_to_number(mut s: &str) -> Number {
+    #[derive(PartialEq, Eq)]
+    enum ParseState {
+        Start,
+        AfterSign,
+        Whole,
+        Fraction,
+        AfterE,
+        AfterExpSign,
+        Exp,
+    }
+    use ParseState::*;
+    
+    s = s.trim_ascii_start();
+    let mut state = Start;
+    let mut has_digit = false;
+    let mut end = s.len();
+    
+    // Find the longest prefix that could be parsed as a float or integer
+    // The potential patterns, determined empirically, are something like this
+    // Integer: sign? digit+
+    // Float:   sign? digit* . digit* ([eE] sign? digit*)? where there is at least 1 digit in the first or second group
+    //          sign? digit+ [eE] sign? digit*
+    for (i, ch) in s.char_indices() {
+        state = match (state, ch) {
+            (Start,        '+' | '-') => { AfterSign }
+            (Start,        '0'..='9') => { has_digit = true; Whole }
+            (Start,        '.')       => { Fraction }
+            (AfterSign,    '0'..='9') => { has_digit = true; Whole }
+            (AfterSign,    '.')       => { Fraction }
+            (Whole,        '0'..='9') => { has_digit = true; Whole }
+            (Whole,        '.')       => { Fraction }
+            (Whole,        'e' | 'E') => { AfterE }
+            (Fraction,     '0'..='9') => { has_digit = true; Fraction }
+            (Fraction,     'e' | 'E') => { AfterE }
+            (AfterE,       '+' | '-') => { AfterExpSign }
+            (AfterE,       '0'..='9') => { Exp }
+            (AfterExpSign, '0'..='9') => { Exp }
+            (Exp,          '0'..='9') => { Exp }
+            (final_state,  _)         => {
+                end = i;
+                state = final_state;
+                break;
+            }
+        }
+    }
+    
+    // Based on the final state, determine the substring that contains only parseable characters
+    let parseable = match state {
+        _ if !has_digit => "",
+        Start           => "",
+        AfterSign       => "",
+        AfterE          => &s[..end - 1], // Drop the trailing e
+        AfterExpSign    => &s[..end - 2], // Drop the trailing e and sign
+        _               => &s[..end]
+    };
+    if parseable.is_empty() {
+        return Number::Int(0);
+    }
+    
+    // If there was no . or e, parse as integer
+    let is_float = matches!(state, Fraction | AfterE | AfterExpSign | Exp);
+    if !is_float {
+        match i32::from_str(parseable) {
+            Ok(val) => {
+                // Oddly, there are 3 valid integers that MMF chooses to parse as floats instead of integers
+                const MMF_INT_RANGE: std::ops::RangeInclusive<i32> = (i32::MIN + 2)..=(i32::MAX - 1);
+                if MMF_INT_RANGE.contains(&val) {
+                    return Number::Int(val);
+                }
+            }
+            Err(err) => match err.kind() {
+                // If there is overflow, we'll try parsing as a float instead
+                std::num::IntErrorKind::PosOverflow => {}
+                std::num::IntErrorKind::NegOverflow => {}
+                // Should be unreachable since we already parsed the string, but default to 0 just in case
+                _ => return Number::Int(0)
+            }
+        };
+    }
+    
+    // If there was a . or e, or the integer was out of range, parse as float
+    match f32::from_str(parseable) {
+        Ok(val) => Number::Float(val),
+        // Should be unreachable since we already parsed the string, but default to 0 just in case
+        Err(_) => Number::Int(0)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::path::PathBuf;
 
-    use super::{simplify_path, interpret_world_ini_section, WorldIniSection};
+    use super::*;
     
     #[test]
     fn simplify_path_basic_path_is_unchanged() {
@@ -826,8 +923,86 @@ mod test {
             (  -1000000.0f32, "-1e+006"),
             (2147483647.0f32, "2.14748e+009"),
         ] {
-            let actual = super::mmf_f32_to_string(input);
+            let actual = mmf_f32_to_string(input);
             assert_eq!(actual.as_str(), expected);
+        }
+    }
+    
+    #[test]
+    fn mmf_string_to_number_works() {
+        for (input, expected) in [
+            // Invalid
+            ("",            Number::Int(0)),
+            ("+",           Number::Int(0)),
+            ("-",           Number::Int(0)),
+            (".",           Number::Int(0)),
+            ("e3",          Number::Int(0)),
+            ("knytt",       Number::Int(0)),
+            // Integers
+            ("123",         Number::Int(123)),
+            ("+123",        Number::Int(123)),
+            ("-123",        Number::Int(-123)),
+            // Max integer range
+            ("2147483646",  Number::Int(2147483646)),
+            ("2147483647",  Number::Float(2147483647.0)),  // float value is approximate
+            ("2147483648",  Number::Float(2147483648.0)),  // float value is approximate
+            // Min integer range
+            ("-2147483646", Number::Int(-2147483646)),
+            ("-2147483647", Number::Float(-2147483647.0)), // float value is approximate
+            ("-2147483648", Number::Float(-2147483648.0)), // float value is approximate
+            ("-2147483649", Number::Float(-2147483649.0)), // float value is approximate
+            // Floats
+            ("123.456",     Number::Float(123.456)),
+            ("123.",        Number::Float(123.0)),
+            (".456",        Number::Float(0.456)),
+            ("+123.456",    Number::Float(123.456)),
+            ("+123.",       Number::Float(123.0)),
+            ("+.456",       Number::Float(0.456)),
+            ("-123.456",    Number::Float(-123.456)),
+            ("-123.",       Number::Float(-123.0)),
+            ("-.456",       Number::Float(-0.456)),
+            // Exponents
+            ("123.456e",    Number::Float(123.456)),
+            ("123.e",       Number::Float(123.0)),
+            ("123e",        Number::Float(123.0)),
+            ("123.456E",    Number::Float(123.456)),
+            ("123.E",       Number::Float(123.0)),
+            ("123E",        Number::Float(123.0)),
+            ("123.456e3",   Number::Float(123456.0)),
+            ("123.e3",      Number::Float(123000.0)),
+            ("123e3",       Number::Float(123000.0)),
+            ("123.456e+3",  Number::Float(123456.0)),
+            ("123.456e-3",  Number::Float(0.123456)),
+        ] {
+            let actual = mmf_string_to_number(input);
+            assert_eq!(Number::from(actual), expected, "while parsing {input}");
+        }
+    }
+    
+    #[test]
+    fn parse_cutscene_music_index_works() {
+        for (input, expected) in [
+            ("0",           CutsceneMusic::SongIndexed(0)),
+            ("255",         CutsceneMusic::SongIndexed(255)),
+            ("-1",          CutsceneMusic::SongNamed("-1".to_string())),
+            ("256",         CutsceneMusic::SongNamed("256".to_string())),
+            ("0a",          CutsceneMusic::AmbiIndexed(0)),
+            ("255A",        CutsceneMusic::AmbiIndexed(255)),
+            ("-1a",         CutsceneMusic::AmbiNamed("-1".to_string())),
+            ("256A",        CutsceneMusic::AmbiNamed("256".to_string())),
+            ("",            CutsceneMusic::SongIndexed(0)),
+            ("a",           CutsceneMusic::AmbiIndexed(0)),
+            ("10xyz",       CutsceneMusic::SongIndexed(10)),
+            ("10xyza",      CutsceneMusic::AmbiIndexed(10)),
+            ("xyz10",       CutsceneMusic::SongIndexed(0)),
+            ("xyz10a",      CutsceneMusic::AmbiIndexed(0)),
+            ("2147483646",  CutsceneMusic::SongNamed("2147483646".to_string())),
+            ("2147483647",  CutsceneMusic::SongNamed("2.14748e+009".to_string())),
+            ("-2147483646", CutsceneMusic::SongNamed("-2147483646".to_string())),
+            ("-2147483647", CutsceneMusic::SongNamed("-2.14748e+009".to_string())),
+        ] {
+            let actual = parse_cutscene_music_index(input);
+            assert_eq!(actual, expected);
         }
     }
 }
