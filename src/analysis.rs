@@ -13,14 +13,16 @@ pub enum AnalysisStatus {
     Finished,
 }
 
-#[derive(Debug)]
 pub struct IndexedAssets {
     pub tilesets: [bool; 256],
     pub gradients: [bool; 256],
     pub songs: [bool; 256],
     pub ambiance: [bool; 256],
-    pub custom_objects: [bool; 256],
-    pub custom_objects_b: [bool; 256],
+}
+
+pub struct CustomObjectsUsed {
+    pub bank_255: [bool; 256],
+    pub bank_254: [bool; 256],
 }
 
 pub struct NamedAssets {
@@ -32,7 +34,6 @@ pub struct NamedAssets {
     pub savegames: Vec<PathBuf>,
 }
 
-#[derive(Debug)]
 pub struct UnusedAssets {
     pub tilesets: Vec<PathBuf>,
     pub gradients: Vec<PathBuf>,
@@ -93,13 +94,13 @@ pub fn list_unused_assets(tx: mpsc::Sender<AnalysisStatus>, world_path: PathBuf)
     remove_well_known_assets(&mut assets);
     
     let _ = tx.send(AnalysisStatus::AnalyzingMap);
-    let mut indexed_assets = analyze_map(&world_path)?;
+    let (mut indexed_assets, custom_objects_used) = analyze_map(&world_path)?;
     indexed_assets.gradients[0] = true;
     indexed_assets.songs[0] = true;
     indexed_assets.ambiance[0] = false;
     
     let _ = tx.send(AnalysisStatus::AnalyzingIni);
-    let named_assets = analyze_ini(&world_path, &mut indexed_assets)?;
+    let named_assets = analyze_ini(&world_path, &custom_objects_used)?;
     
     remove_named_assets(&mut assets, &named_assets);
     remove_indexed_assets(&mut assets, &indexed_assets);
@@ -236,7 +237,7 @@ fn remove_well_known_assets(assets: &mut HashMap<PathBuf, PathBuf>) {
     remove_cutscene_files(assets, "ending".as_ref());
 }
 
-fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
+fn analyze_map(world_path: &Path) -> anyhow::Result<(IndexedAssets, CustomObjectsUsed)> {
     let map_path = world_path.join("Map.bin");
     let screens = libks::map_bin::parse_map_file(&map_path)
         .with_context(|| format!("Failed to parse map file at {:?}", map_path))?;
@@ -245,8 +246,8 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
     let mut gradients = [false; 256];
     let mut songs = [false; 256];
     let mut ambiance = [false; 256];
-    let mut custom_objects = [false; 256];
-    let mut custom_objects_b = [false; 256];
+    let mut bank_255 = [false; 256];
+    let mut bank_254 = [false; 256];
     
     for screen in screens {
         let mut uses_tileset_a = false;
@@ -263,8 +264,8 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
             for tile in layer {
                 if tile.1 == 0 { continue; }
                 match tile.0 {
-                    255 => custom_objects[tile.1 as usize] = true,
-                    254 => custom_objects_b[tile.1 as usize] = true,
+                    255 => bank_255[tile.1 as usize] = true,
+                    254 => bank_254[tile.1 as usize] = true,
                     _ => {}
                 };
             }
@@ -278,14 +279,18 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<IndexedAssets> {
         ambiance[screen.assets.ambiance_b as usize] = true;
     }
     
-    Ok(IndexedAssets {
+    let indexed_assets = IndexedAssets {
         tilesets,
         gradients,
         songs,
         ambiance,
-        custom_objects,
-        custom_objects_b
-    })
+    };
+    let custom_objects_used = CustomObjectsUsed {
+        bank_255,
+        bank_254
+    };
+    
+    Ok((indexed_assets, custom_objects_used))
 }
 
 fn remove_indexed_assets(assets: &mut HashMap<PathBuf, PathBuf>, map_assets: &IndexedAssets) {
@@ -306,7 +311,7 @@ fn remove_indexed_assets(assets: &mut HashMap<PathBuf, PathBuf>, map_assets: &In
     }
 }
 
-fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow::Result<NamedAssets> {
+fn analyze_ini(world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> anyhow::Result<NamedAssets> {
     // Helper functions
     let normalize_cutscene = |mut s: String| -> Option<PathBuf> {
         s.make_ascii_lowercase();
@@ -412,8 +417,8 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
             }
             WorldIniSection::CustomObject(bank, index) => {
                 let object_appears_in_level = match bank {
-                    255 => indexed_assets.custom_objects[index as usize],
-                    254 => indexed_assets.custom_objects_b[index as usize],
+                    255 => custom_objects_used.bank_255[index as usize],
+                    254 => custom_objects_used.bank_254[index as usize],
                     _ => false,
                 };
                 if !object_appears_in_level {
@@ -426,11 +431,9 @@ fn analyze_ini(world_path: &Path, indexed_assets: &mut IndexedAssets) -> anyhow:
             WorldIniSection::CutsceneMusic => {
                 for (_, value) in section.iter() {
                     match parse_cutscene_music_index(value) {
-                        CutsceneMusic::SongIndexed(i) => { indexed_assets.songs[i as usize] = true; }
-                        CutsceneMusic::AmbiIndexed(i) => { indexed_assets.ambiance[i as usize] = true; }
-                        CutsceneMusic::SongNamed(s)   => { songs.insert(s); }
-                        CutsceneMusic::AmbiNamed(s)   => { ambiance.insert(s); }
-                    }
+                        CutsceneMusic::Song(s) => songs.insert(s),
+                        CutsceneMusic::Ambi(s) => ambiance.insert(s),
+                    };
                 }
             }
             WorldIniSection::CustomCharacter => {
@@ -606,34 +609,19 @@ fn interpret_world_ini_section(key: &str) -> Option<WorldIniSection> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug, PartialEq, Eq))]
 enum CutsceneMusic {
-    SongIndexed(u8),
-    SongNamed(String),
-    AmbiIndexed(u8),
-    AmbiNamed(String),
+    Song(String),
+    Ambi(String),
 }
 
 fn parse_cutscene_music_index(s: &str) -> CutsceneMusic {
     let is_ambi = s.ends_with(['a', 'A']);
     match mmf_string_to_number(s) {
-        // If it's an int, we just need to determine if it's a valid index (0-255)
-        Number::Int(val) => match u8::try_from(val) {
-            Ok(val) if is_ambi => CutsceneMusic::AmbiIndexed(val),
-            Ok(val)            => CutsceneMusic::SongIndexed(val),
-            Err(_)  if is_ambi => CutsceneMusic::AmbiNamed(val.to_string()),
-            Err(_)             => CutsceneMusic::SongNamed(val.to_string()),
-        }
-        // If it's a float, we need to determine if it will become a valid index when converted back to string
-        Number::Float(val) => {
-            let val_string = mmf_f32_to_string(val);
-            match i32::from_str(&val_string).map(u8::try_from) { // A little hacky but whatever, it works
-                Ok(Ok(val)) if is_ambi => CutsceneMusic::AmbiIndexed(val),
-                Ok(Ok(val))            => CutsceneMusic::SongIndexed(val),
-                _           if is_ambi => CutsceneMusic::AmbiNamed(val_string),
-                _                      => CutsceneMusic::SongNamed(val_string),
-            }
-        }
+        Number::Int(val)   if is_ambi => CutsceneMusic::Ambi(val.to_string()),
+        Number::Int(val)              => CutsceneMusic::Song(val.to_string()),
+        Number::Float(val) if is_ambi => CutsceneMusic::Ambi(mmf_f32_to_string(val)),
+        Number::Float(val)            => CutsceneMusic::Song(mmf_f32_to_string(val)),
     }
 }
 
@@ -982,24 +970,22 @@ mod test {
     #[test]
     fn parse_cutscene_music_index_works() {
         for (input, expected) in [
-            ("0",           CutsceneMusic::SongIndexed(0)),
-            ("255",         CutsceneMusic::SongIndexed(255)),
-            ("-1",          CutsceneMusic::SongNamed("-1".to_string())),
-            ("256",         CutsceneMusic::SongNamed("256".to_string())),
-            ("0a",          CutsceneMusic::AmbiIndexed(0)),
-            ("255A",        CutsceneMusic::AmbiIndexed(255)),
-            ("-1a",         CutsceneMusic::AmbiNamed("-1".to_string())),
-            ("256A",        CutsceneMusic::AmbiNamed("256".to_string())),
-            ("",            CutsceneMusic::SongIndexed(0)),
-            ("a",           CutsceneMusic::AmbiIndexed(0)),
-            ("10xyz",       CutsceneMusic::SongIndexed(10)),
-            ("10xyza",      CutsceneMusic::AmbiIndexed(10)),
-            ("xyz10",       CutsceneMusic::SongIndexed(0)),
-            ("xyz10a",      CutsceneMusic::AmbiIndexed(0)),
-            ("2147483646",  CutsceneMusic::SongNamed("2147483646".to_string())),
-            ("2147483647",  CutsceneMusic::SongNamed("2.14748e+009".to_string())),
-            ("-2147483646", CutsceneMusic::SongNamed("-2147483646".to_string())),
-            ("-2147483647", CutsceneMusic::SongNamed("-2.14748e+009".to_string())),
+            ("0",           CutsceneMusic::Song("0".to_string())),
+            ("-1",          CutsceneMusic::Song("-1".to_string())),
+            ("256",         CutsceneMusic::Song("256".to_string())),
+            ("0a",          CutsceneMusic::Ambi("0".to_string())),
+            ("-1a",         CutsceneMusic::Ambi("-1".to_string())),
+            ("256A",        CutsceneMusic::Ambi("256".to_string())),
+            ("",            CutsceneMusic::Song("0".to_string())),
+            ("a",           CutsceneMusic::Ambi("0".to_string())),
+            ("10xyz",       CutsceneMusic::Song("10".to_string())),
+            ("10xyza",      CutsceneMusic::Ambi("10".to_string())),
+            ("xyz10",       CutsceneMusic::Song("0".to_string())),
+            ("xyz10a",      CutsceneMusic::Ambi("0".to_string())),
+            ("2147483646",  CutsceneMusic::Song("2147483646".to_string())),
+            ("2147483647",  CutsceneMusic::Song("2.14748e+009".to_string())),
+            ("-2147483646", CutsceneMusic::Song("-2147483646".to_string())),
+            ("-2147483647", CutsceneMusic::Song("-2.14748e+009".to_string())),
         ] {
             let actual = parse_cutscene_music_index(input);
             assert_eq!(actual, expected);
