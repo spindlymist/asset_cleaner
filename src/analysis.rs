@@ -312,38 +312,6 @@ fn remove_indexed_assets(assets: &mut HashMap<PathBuf, PathBuf>, map_assets: &In
 }
 
 fn analyze_ini(world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> anyhow::Result<NamedAssets> {
-    // Helper functions
-    let normalize_cutscene = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(s);
-        simplify_path(path, world_path)
-    };
-    let normalize_custom_object = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(format!("custom objects/{s}"));
-        simplify_path(path, world_path)
-    };
-    let normalize_sound = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(format!("sounds/{s}.ogg"));
-        simplify_path(path, world_path)
-    };
-    let normalize_song = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(format!("music/song{s}.ogg"));
-        Some(path)
-    };
-    let normalize_ambiance = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(format!("ambiance/ambi{s}.ogg"));
-        Some(path)
-    };
-    let normalize_savegame = |mut s: String| -> Option<PathBuf> {
-        s.make_ascii_lowercase();
-        let path = PathBuf::from(format!("savegame{s}.ini"));
-        simplify_path(path, world_path)
-    };
-    
     let mut cutscenes = HashSet::new();
     let mut custom_objects = HashSet::new();
     let mut sounds = HashSet::new();
@@ -488,23 +456,55 @@ fn analyze_ini(world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> an
         };
     }
     
+    // Helper functions
+    fn normalize_cutscene(mut s: String, world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(s);
+        simplify_path(path, world_path)
+    }
+    fn normalize_custom_object(mut s: String, world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("custom objects/{s}"));
+        simplify_path(path, world_path)
+    }
+    fn normalize_sound(mut s: String, world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("sounds/{s}.ogg"));
+        simplify_path(path, world_path)
+    }
+    fn normalize_song(mut s: String, _world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("music/song{s}.ogg"));
+        Some(path)
+    }
+    fn normalize_ambiance(mut s: String, _world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("ambiance/ambi{s}.ogg"));
+        Some(path)
+    }
+    fn normalize_savegame(mut s: String, world_path: &Path) -> Option<PathBuf> {
+        s.make_ascii_lowercase();
+        let path = PathBuf::from(format!("savegame{s}.ini"));
+        simplify_path(path, world_path)
+    }
+    
     let cutscenes_normalized: Vec<_> = cutscenes.into_iter()
-        .filter_map(normalize_cutscene)
+        .filter_map(|p| normalize_cutscene(p, world_path))
         .collect();
     let custom_objects_normalized: Vec<_> = custom_objects.into_iter()
-        .filter_map(normalize_custom_object)
+        .filter_map(|p| normalize_custom_object(p, world_path))
         .collect();
     let sounds_normalized: Vec<_> = sounds.into_iter()
-        .filter_map(normalize_sound)
+        .filter_map(|p| normalize_sound(p, world_path))
         .collect();
     let songs_normalized: Vec<_> = songs.into_iter()
-        .filter_map(normalize_song)
+        .filter_map(|p| normalize_song(p, world_path))
         .collect();
     let ambiance_normalized: Vec<_> = ambiance.into_iter()
-        .filter_map(normalize_ambiance)
+        .filter_map(|p| normalize_ambiance(p, world_path))
         .collect();
     let savegames_normalized: Vec<_> = savegames.into_iter()
-        .filter_map(normalize_savegame)
+        .filter_map(|p| normalize_savegame(p, world_path))
         .collect();
     
     Ok(NamedAssets {
@@ -550,13 +550,12 @@ fn simplify_path(rel_path: PathBuf, base: &Path) -> Option<PathBuf> {
     
     fn is_special(part: &std::ffi::OsStr) -> bool {
         part.to_str()
-            .is_some_and(|part| ["", ".", ".."].contains(&part))
+            .is_some_and(|part| part.is_empty() || part.ends_with('.'))
     }
     
     if rel_path.iter().any(is_special) {
         let full_path = base.join(rel_path);
-        let abs_path = std::path::absolute(full_path)
-            .expect("Path should not be empty or relative");
+        let abs_path = std::path::absolute(full_path).expect("Path should not be empty or relative");
         match abs_path.strip_prefix(base) {
             Ok(rel_path) => Some(rel_path.to_owned()),
             Err(_) => None,
@@ -790,6 +789,29 @@ mod test {
         let rel_path = PathBuf::from(r"..\..\..\..\..\..\..\Games\Knytt Stories\Worlds\Nifflas - The Machine\Custom Objects\Juni.png");
         let expected = Some(PathBuf::from(r"Custom Objects\Juni.png"));
         assert_eq!(simplify_path(rel_path, &base), expected);
+    }
+    
+    #[test]
+    fn simplify_path_strips_trailing_dots() {
+        let base = PathBuf::from(r"D:\Games\Knytt Stories\Worlds\Nifflas - The Machine");
+        let rel_path = PathBuf::from(r"Custom Objects\Juni.png......");
+        let expected = Some(PathBuf::from(r"Custom Objects\Juni.png"));
+        assert_eq!(simplify_path(rel_path, &base), expected);
+    }
+    
+    #[test]
+    fn simplify_path_strips_single_trailing_dot_from_directories() {
+        let base = PathBuf::from(r"D:\Games\Knytt Stories\Worlds\Nifflas - The Machine");
+        {
+            let rel_path = PathBuf::from(r"Custom Objects.\Juni.png");
+            let expected = Some(PathBuf::from(r"Custom Objects\Juni.png"));
+            assert_eq!(simplify_path(rel_path, &base), expected);
+        }
+        {
+            let rel_path = PathBuf::from(r"Custom Objects..\Juni.png");
+            let expected = Some(PathBuf::from(r"Custom Objects..\Juni.png"));
+            assert_eq!(simplify_path(rel_path, &base), expected);
+        }
     }
     
     #[test]
