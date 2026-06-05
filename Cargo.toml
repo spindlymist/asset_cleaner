@@ -4,20 +4,19 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-anyhow = "1.0.100"
-env_logger = "0.11.8"
+anyhow = "1.0.102"
+env_logger = "0.11.10"
 imgui_app = { git = "https://github.com/spindlymist/imgui_app" }
-kira = { version = "0.11.0", default-features = false, features = ["cpal", "ogg"] }
-libc = "0.2.177"
+kira = { version = "0.12.1", default-features = false, features = ["cpal", "ogg", "vorbis"] }
 libks = { git = "https://github.com/spindlymist/libks", features = ["fractional-coords"] }
 libks_ini = { git = "https://github.com/spindlymist/libks" }
 mint = "0.5.9"
 natord = "1.0.9"
-regex = { version = "1.12.2", features = ["use_std"] }
-rfd = { version = "0.15.4", default-features = false, features = ["gtk3"] }
-symphonia = { version = "0.5.4", default-features = false, features = ["ogg", "vorbis"] }
-trash = "5.2.5"
+regex = { version = "1.12.3", features = ["use_std"] }
+rfd = { version = "0.17.2", default-features = false, features = ["gtk3"] }
+symphonia = { version = "0.6.0", default-features = false, features = ["ogg", "vorbis"] }
+trash = "5.2.6"
 walkdir = "2.5.0"
 
 [build-dependencies]
-cc = "1.2.44"
+cc = "1.2.63"

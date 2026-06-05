@@ -1,10 +1,10 @@
-use std::{fs::{self, File}, path::{Path, PathBuf}, time::Duration};
+use std::{fs::{self, File}, path::{Path, PathBuf}};
 
 use anyhow::Result;
 use imgui_app::{imgui, Fonts, Textures, Texture, ImguiCursorExt};
 use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
-use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTagKey}, default::formats::OggReader};
+use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTag, units::Timestamp}, default::formats::OggReader};
 
 use crate::{SharedState, Task, analysis::UnusedAssets, widgets::{ChecklistItem, checklist_box, error_display, progress_button_with_size, text_centered}};
 
@@ -738,41 +738,42 @@ fn compare_list_items(a: &AssetListItem, b: &AssetListItem) -> std::cmp::Orderin
 fn metadata_from_file(path: &Path) -> Result<Metadata> {
     let mut artist = None;
     let mut title = None;
-    let mut duration = None;
+    let mut duration_readable = None;
     
     let file = Box::new(File::open(path)?);
     let source_stream = MediaSourceStream::new(file, Default::default());
-    let mut reader = OggReader::try_new(source_stream, &Default::default())?;
+    let mut reader = OggReader::try_new(source_stream, Default::default())?;
     
     let mut meta = reader.metadata();
     if let Some(meta) = meta.skip_to_latest() {
-        for tag in meta.tags() {
-            match tag.std_key {
-                Some(StandardTagKey::Artist) => {
-                    artist = Some(tag.value.to_string());
+        for tag in &meta.media.tags {
+            match &tag.std {
+                Some(StandardTag::Artist(value)) => {
+                    artist = Some(String::clone(value));
                 }
-                Some(StandardTagKey::TrackTitle) => {
-                    title = Some(tag.value.to_string());
+                Some(StandardTag::TrackTitle(value)) => {
+                    title = Some(String::clone(value));
                 }
                 _ => {}
             };
         }
     };
     
-    if let Some(track) = reader.default_track()
-        && let Some(ref time_base) = track.codec_params.time_base
-        && let Some(n_frames) = track.codec_params.n_frames
+    if let Some(track) = reader.default_track(symphonia::core::formats::TrackType::Audio)
+        && let Some(time_base) = &track.time_base
+        && let Some(duration) = &track.duration
     {
-        let seconds = Duration::from(time_base.calc_time(n_frames))
+        let timestamp = duration.timestamp_from(Timestamp::ZERO).unwrap();
+        let seconds = time_base.calc_time(timestamp).unwrap()
             .as_secs_f64()
             .round() as u64;
-        duration = Some(human_readable_duration(seconds));
+        duration_readable = Some(human_readable_duration(seconds));
     }
     
     Ok(Metadata {
         artist: artist.unwrap_or_default(),
         title: title.unwrap_or_default(),
-        duration: duration.unwrap_or_default(),
+        duration: duration_readable.unwrap_or_default(),
     })
 }
 
