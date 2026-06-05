@@ -23,6 +23,7 @@ pub enum Tab {
 const N_TABS: usize = Tab::Ignored as usize + 1;
 
 pub struct State {
+    #[allow(dead_code)]
     pub level_dir: PathBuf,
     pub level_name: String,
     pub level_icon: Option<Texture>,
