@@ -630,22 +630,20 @@ mod c {
             f: std::os::raw::c_float,
             buffer: *mut std::os::raw::c_char,
             buffer_size: usize,
-        ) -> ();
+        ) -> usize;
     }
 }
 
+
 pub fn mmf_f32_to_string(f: f32) -> String {
     match f {
-        f32::INFINITY => "1.#INF".to_owned(),
-        f32::NEG_INFINITY => "-1.#INF".to_owned(),
-        f if f.is_nan() => "1.$NaN".to_owned(),
-        f => unsafe {
-            let mut buffer = [0i8; 16];
-            c::float_to_str(f, buffer.as_mut_ptr(), buffer.len());
-            std::ffi::CStr::from_ptr(buffer.as_ptr())
-                .to_str()
-                .expect("snprintf should output valid UTF-8")
-                .to_owned() // Could skip copy with vec_into_raw_parts nightly feature
+        f32::INFINITY     => return String::from("1.#INF"),
+        f32::NEG_INFINITY => return String::from("-1.#INF"),
+        _ if f.is_nan()   => return String::from("1.$NaN"),
+        _ => unsafe {
+            let (buffer, _, capacity) = String::with_capacity(16).into_raw_parts();
+            let length = c::float_to_str(f, buffer as *mut i8, capacity);
+            String::from_raw_parts(buffer, length, capacity)
         }
     }
 }
@@ -920,18 +918,21 @@ mod test {
     #[test]
     fn mmf_f32_to_string_works() {
         for (input, expected) in [
-            (     999.001f32, "999.001"),
-            (    999.0001f32, "999"),
-            (     1000.01f32, "1000.01"),
-            (    1000.001f32, "1000"),
-            (    999999.0f32, "999999"),
-            (   1000000.0f32, "1e+006"),
-            (   1000001.0f32, "1e+006"),
-            (   1000010.0f32, "1.00001e+006"),
-            (   1000100.0f32, "1.0001e+006"),
-            (   -999999.0f32, "-999999"),
-            (  -1000000.0f32, "-1e+006"),
-            (2147483647.0f32, "2.14748e+009"),
+            (       999.001f32, "999.001"),
+            (      999.0001f32, "999"),
+            (       1000.01f32, "1000.01"),
+            (      1000.001f32, "1000"),
+            (      999999.0f32, "999999"),
+            (     1000000.0f32, "1e+006"),
+            (     1000001.0f32, "1e+006"),
+            (     1000010.0f32, "1.00001e+006"),
+            (     1000100.0f32, "1.0001e+006"),
+            (     -999999.0f32, "-999999"),
+            (    -1000000.0f32, "-1e+006"),
+            (  2147483647.0f32, "2.14748e+009"),
+            (    f32::INFINITY, "1.#INF"),
+            (f32::NEG_INFINITY, "-1.#INF"),
+            (         f32::NAN, "1.$NaN")
         ] {
             let actual = mmf_f32_to_string(input);
             assert_eq!(actual.as_str(), expected);
