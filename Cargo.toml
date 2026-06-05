@@ -19,4 +19,5 @@ trash = "5.2.6"
 walkdir = "2.5.0"
 
 [build-dependencies]
+cargo-build = "1.0.0"
 cc = "1.2.63"

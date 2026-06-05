@@ -348,6 +348,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargo-build"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21488e36f9dd8ed0062c1297d01183f137c428b840e792ccb01c988d670bf3a4"
+
+[[package]]
 name = "cc"
 version = "1.2.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2623,6 +2629,7 @@ name = "unused_assets"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cargo-build",
  "cc",
  "env_logger",
  "imgui_app",
