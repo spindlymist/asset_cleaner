@@ -1,6 +1,6 @@
 fn main() {
-    cargo_build::rerun_if_changed("c/float_to_str.c");
+    cargo_build::rerun_if_changed("src/convert.c");
     cc::Build::new()
-        .file("c/float_to_str.c")
-        .compile("float_to_str");
+        .file("src/convert.c")
+        .compile("convert");
 }
