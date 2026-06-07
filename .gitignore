@@ -1,4 +1,4 @@
 /target
 /.vscode
 *.ps1
-unused_assets.ini
+asset_cleaner.ini
