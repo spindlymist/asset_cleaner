@@ -408,7 +408,7 @@ fn analyze_ini(ini: &Ini, world_path: &Path, custom_objects_used: &CustomObjects
     let mut ambiance = HashSet::new();
     let mut savegames = HashSet::new();
     
-    for section in ini.iter_sections() {
+    for section in ini.iter_virtual_sections() {
         let Some(section_type) = interpret_world_ini_section(section.key()) else {
             continue;
         };
