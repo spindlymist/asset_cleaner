@@ -1283,7 +1283,7 @@ dependencies = [
 [[package]]
 name = "libks"
 version = "0.2.2"
-source = "git+https://github.com/spindlymist/libks#bace4e4fd65b97c928fef22c42b46955c25173c5"
+source = "git+https://github.com/spindlymist/libks#dd8fcd159b1b46ce54a60413aa20ea6289e261e1"
 dependencies = [
  "byteorder",
  "const-str",
@@ -1297,7 +1297,7 @@ dependencies = [
 [[package]]
 name = "libks_ini"
 version = "0.1.0"
-source = "git+https://github.com/spindlymist/libks#bace4e4fd65b97c928fef22c42b46955c25173c5"
+source = "git+https://github.com/spindlymist/libks#dd8fcd159b1b46ce54a60413aa20ea6289e261e1"
 dependencies = [
  "memchr",
 ]

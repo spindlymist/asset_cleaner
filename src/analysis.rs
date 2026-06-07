@@ -1,13 +1,17 @@
 use std::{collections::{HashMap, HashSet}, ops::RangeBounds, path::{Path, PathBuf}, str::FromStr, sync::mpsc};
 
 use anyhow::{Context, Result};
-use libks::map_bin::LayerData;
+use libks::map_bin::{LayerData, ScreenData};
+use libks_ini::Ini;
 use walkdir::WalkDir;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum AnalysisStatus {
     EnumeratingFiles,
+    LoadingMap,
+    LoadingIni,
     AnalyzingMap,
+    CheckingCoUsage,
     AnalyzingIni,
     Aborted,
     Finished,
@@ -93,14 +97,27 @@ pub fn list_unused_assets(tx: mpsc::Sender<AnalysisStatus>, world_path: PathBuf)
     let (mut assets, ignored) = list_all_assets(&world_path)?;
     remove_well_known_assets(&mut assets);
     
+    let _ = tx.send(AnalysisStatus::LoadingMap);
+    let map_path = world_path.join("Map.bin");
+    let screens = libks::map_bin::parse_map_file(&map_path)
+        .with_context(|| format!("Failed to parse map file at {:?}", map_path))?;
+    
+    let _ = tx.send(AnalysisStatus::LoadingIni);
+    let ini_path = world_path.join("World.ini");
+    let ini = libks::world_ini::load_ini(&ini_path)
+        .with_context(|| format!("Failed to parse ini at {:?}", ini_path))?;
+    
     let _ = tx.send(AnalysisStatus::AnalyzingMap);
-    let (mut indexed_assets, custom_objects_used) = analyze_map(&world_path)?;
+    let mut indexed_assets = analyze_map(&screens)?;
     indexed_assets.gradients[0] = true;
     indexed_assets.songs[0] = true;
     indexed_assets.ambiance[0] = false;
     
+    let _ = tx.send(AnalysisStatus::CheckingCoUsage);
+    let custom_objects_used = check_co_usage(&screens, &ini);
+    
     let _ = tx.send(AnalysisStatus::AnalyzingIni);
-    let named_assets = analyze_ini(&world_path, &custom_objects_used)?;
+    let named_assets = analyze_ini(&ini, &world_path, &custom_objects_used)?;
     
     remove_named_assets(&mut assets, &named_assets);
     remove_indexed_assets(&mut assets, &indexed_assets);
@@ -237,17 +254,11 @@ fn remove_well_known_assets(assets: &mut HashMap<PathBuf, PathBuf>) {
     remove_cutscene_files(assets, "ending".as_ref());
 }
 
-fn analyze_map(world_path: &Path) -> anyhow::Result<(IndexedAssets, CustomObjectsUsed)> {
-    let map_path = world_path.join("Map.bin");
-    let screens = libks::map_bin::parse_map_file(&map_path)
-        .with_context(|| format!("Failed to parse map file at {:?}", map_path))?;
-    
+fn analyze_map(screens: &[ScreenData]) -> anyhow::Result<IndexedAssets> {
     let mut tilesets = [false; 256];
     let mut gradients = [false; 256];
     let mut songs = [false; 256];
     let mut ambiance = [false; 256];
-    let mut bank_255 = [false; 256];
-    let mut bank_254 = [false; 256];
     
     for screen in screens {
         let mut uses_tileset_a = false;
@@ -257,17 +268,6 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<(IndexedAssets, CustomObject
             for tile in layer {
                 uses_tileset_a |= tile.0 == 0 && tile.1 > 0;
                 uses_tileset_b |= tile.0 == 1 && tile.1 > 0;
-            }
-        }
-        
-        for LayerData(layer) in &screen.layers[4..] {
-            for tile in layer {
-                if tile.1 == 0 { continue; }
-                match tile.0 {
-                    255 => bank_255[tile.1 as usize] = true,
-                    254 => bank_254[tile.1 as usize] = true,
-                    _ => {}
-                };
             }
         }
         
@@ -285,42 +285,128 @@ fn analyze_map(world_path: &Path) -> anyhow::Result<(IndexedAssets, CustomObject
         songs,
         ambiance,
     };
-    let custom_objects_used = CustomObjectsUsed {
-        bank_255,
-        bank_254
-    };
     
-    Ok((indexed_assets, custom_objects_used))
+    Ok(indexed_assets)
 }
 
-fn remove_indexed_assets(assets: &mut HashMap<PathBuf, PathBuf>, map_assets: &IndexedAssets) {
-    for i in 0..=255 {
-        if map_assets.tilesets[i] {
-            assets.remove(&PathBuf::from(format!("tilesets/tileset{i}.png")));
+fn check_co_usage(screens: &[ScreenData], ini: &Ini) -> CustomObjectsUsed {  
+    let mut bank_255 = [false; 256];
+    let mut bank_254 = [false; 256];
+    
+    // Find COs placed on the map
+    for screen in screens {
+        for LayerData(layer) in &screen.layers[4..] {
+            for tile in layer {
+                if tile.1 == 0 { continue; }
+                match tile.0 {
+                    255 => bank_255[tile.1 as usize] = true,
+                    254 => bank_254[tile.1 as usize] = true,
+                    _ => {}
+                };
+            }
         }
-        if map_assets.gradients[i] {
-            assets.remove(&PathBuf::from(format!("gradients/gradient{i}.png")));
-        }
-        if map_assets.songs[i] {
-            assets.remove(&PathBuf::from(format!("music/song{i}.ogg")));
-            assets.remove(&PathBuf::from(format!("music/intro{i}.ogg")));
-        }
-        if map_assets.ambiance[i] {
-            assets.remove(&PathBuf::from(format!("ambiance/ambi{i}.ogg")));
+    }
+    
+    // Find COs referenced by triggers
+    for section in ini.iter_virtual_sections() {
+        let Some(WorldIniSection::Screen(..)) = interpret_world_ini_section(section.key())
+            else { continue };
+        
+        let bank = section.get("TrigBank(A)")
+            .and_then(parse_trig_bank)
+            .unwrap_or(0);
+        let obj = section.get("TrigObject(A)")
+            .map(parse_trig_object)
+            .unwrap_or(0);
+        match (bank, obj) {
+            (255, 1..) => bank_255[obj as usize] = true,
+            (254, 1..) => bank_254[obj as usize] = true,
+            _ => {}
+        };
+        
+        let bank = section.get("TrigBank(B)")
+            .and_then(parse_trig_bank)
+            .unwrap_or(0);
+        let obj = section.get("TrigObject(B)")
+            .map(parse_trig_object)
+            .unwrap_or(0);
+        match (bank, obj) {
+            (255, 1..) => bank_255[obj as usize] = true,
+            (254, 1..) => bank_254[obj as usize] = true,
+            _ => {}
+        };
+        
+        let bank = section.get("TrigBank(C)")
+            .and_then(parse_trig_bank)
+            .unwrap_or(0);
+        let obj = section.get("TrigObject(C)")
+            .map(parse_trig_object)
+            .unwrap_or(0);
+        match (bank, obj) {
+            (255, 1..) => bank_255[obj as usize] = true,
+            (254, 1..) => bank_254[obj as usize] = true,
+            _ => {}
+        };
+    }
+    
+    CustomObjectsUsed {
+        bank_255,
+        bank_254
+    }
+}
+
+fn parse_trig_bank(s: &str) -> Option<u8> {
+    use crate::convert::{ini_parse_number, Number};
+    match ini_parse_number(s) {
+        // Integers are valid in the range [0, 255]
+        Number::Int(val_i32) => match u8::try_from(val_i32) {
+            Ok(val_u8) => Some(val_u8),
+            Err(_) => None,
+        },
+        // Doubles are valid if they are integers in the range [0, 255]
+        Number::Double(val_f64) => {
+            if is_valid_u8(val_f64) {
+                Some(val_f64 as u8)
+            }
+            else {
+                None
+            }
         }
     }
 }
 
-fn analyze_ini(world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> anyhow::Result<NamedAssets> {
+fn parse_trig_object(s: &str) -> u8 {
+    use crate::convert::{ini_parse_number, mmf_double_to_str, Number};
+    match ini_parse_number(s) {
+        // Integers are valid in the range [0, 255]
+        Number::Int(val_i32) => u8::try_from(val_i32).unwrap_or(0),
+        // Doubles are valid if they are integers in the range [0, 255],
+        // or at least appear to be when converted to string
+        Number::Double(val_f64) => {
+            if is_valid_u8(val_f64) {
+                val_f64 as u8
+            }
+            else {
+                let val_s = mmf_double_to_str(val_f64);
+                u8::from_str(&val_s).unwrap_or(0)
+            }
+        }
+    }
+}
+
+fn is_valid_u8(value: f64) -> bool {
+    value.trunc() == value
+        && value >= 0.0
+        && value <= 255.0
+}
+
+fn analyze_ini(ini: &Ini, world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> anyhow::Result<NamedAssets> {
     let mut cutscenes = HashSet::new();
     let mut custom_objects = HashSet::new();
     let mut sounds = HashSet::new();
     let mut songs = HashSet::new();
     let mut ambiance = HashSet::new();
     let mut savegames = HashSet::new();
-    let ini_path = world_path.join("World.ini");
-    let ini = libks::world_ini::load_ini(&ini_path)
-        .with_context(|| format!("Failed to parse ini at {:?}", ini_path))?;
     
     for section in ini.iter_sections() {
         let Some(section_type) = interpret_world_ini_section(section.key()) else {
@@ -515,6 +601,24 @@ fn analyze_ini(world_path: &Path, custom_objects_used: &CustomObjectsUsed) -> an
         ambiance: ambiance_normalized,
         savegames: savegames_normalized,
     })
+}
+
+fn remove_indexed_assets(assets: &mut HashMap<PathBuf, PathBuf>, map_assets: &IndexedAssets) {
+    for i in 0..=255 {
+        if map_assets.tilesets[i] {
+            assets.remove(&PathBuf::from(format!("tilesets/tileset{i}.png")));
+        }
+        if map_assets.gradients[i] {
+            assets.remove(&PathBuf::from(format!("gradients/gradient{i}.png")));
+        }
+        if map_assets.songs[i] {
+            assets.remove(&PathBuf::from(format!("music/song{i}.ogg")));
+            assets.remove(&PathBuf::from(format!("music/intro{i}.ogg")));
+        }
+        if map_assets.ambiance[i] {
+            assets.remove(&PathBuf::from(format!("ambiance/ambi{i}.ogg")));
+        }
+    }
 }
 
 fn remove_named_assets(assets: &mut HashMap<PathBuf, PathBuf>, ini_assets: &NamedAssets) {

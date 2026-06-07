@@ -63,13 +63,22 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
     match state.status {
         AnalysisStatus::EnumeratingFiles => {
             ui.text("Enumerating files...");
-        },
+        }
+        AnalysisStatus::LoadingMap => {
+            ui.text("Loading Map.bin...");
+        }
+        AnalysisStatus::LoadingIni => {
+            ui.text("Loading World.ini...");
+        }
         AnalysisStatus::AnalyzingMap => {
             ui.text("Analyzing Map.bin...");
-        },
+        }
+        AnalysisStatus::CheckingCoUsage => {
+            ui.text("Checking custom object usage...");
+        }
         AnalysisStatus::AnalyzingIni => {
             ui.text("Analyzing World.ini...");
-        },
+        }
         AnalysisStatus::Aborted => {
             if let Some(err) = state.error.as_ref() {
                 ui.text(format!("An error occurred while processing the level:"));
@@ -81,10 +90,10 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
             if ui.button("Return to level select") {
                 task = Task::SelectLevel;
             }
-        },
+        }
         AnalysisStatus::Finished => {
             ui.text("Finished.");
-        },
+        }
     }
     
     task
