@@ -491,8 +491,8 @@ fn analyze_ini(ini: &Ini, world_path: &Path, custom_objects_used: &CustomObjects
                 }
             }
             WorldIniSection::CustomCharacter => {
-                for (key, value) in section.iter() {
-                    if is_range_with_affixes(key, "Image", "", 1..=255) {
+                for i in 0..=255 {
+                    if let Some(value) = section.get(&format!("Image{i}")) {
                         custom_objects.insert(value.to_owned());
                         custom_objects.insert(format!("U{value}"));
                     }
