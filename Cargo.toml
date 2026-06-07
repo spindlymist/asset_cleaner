@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.102"
+chardetng = "1.0.0"
+encoding_rs = "0.8.35"
 env_logger = "0.11.10"
 imgui_app = { git = "https://github.com/spindlymist/imgui_app" }
 kira = { version = "0.12.1", default-features = false, features = ["cpal", "ogg", "vorbis"] }

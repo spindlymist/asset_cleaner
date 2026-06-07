@@ -1,6 +1,7 @@
-use std::{fs::{self, File}, path::{Path, PathBuf}};
+use std::{borrow::Cow, fs::{self, File}, path::{Path, PathBuf}};
 
 use anyhow::Result;
+use chardetng::EncodingDetector;
 use imgui_app::{imgui, Fonts, Textures, Texture, ImguiCursorExt};
 use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
@@ -546,9 +547,27 @@ fn build_preview_text(ui: &Ui, item: &mut AssetListItem, font: imgui::FontId) {
     };
     
     if should_load {
-        match fs::read_to_string(&item.abs_path) {
-            Ok(val) => {
-                item.text = Some(val);
+        match fs::read(&item.abs_path) {
+            Ok(bytes) => {
+                let ext = item.abs_path.extension().map(|ext| ext.to_ascii_lowercase());
+                let ext = ext.as_ref()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("");
+                
+                let encoding = match ext {
+                    "ini" => encoding_rs::WINDOWS_1252,
+                    _ => {
+                        let mut detector = EncodingDetector::new(chardetng::Iso2022JpDetection::Allow);
+                        detector.feed(&bytes, true);
+                        detector.guess(None, chardetng::Utf8Detection::Allow)
+                    }
+                };
+                let text = match encoding.decode_with_bom_removal(&bytes) {
+                    (Cow::Owned(bytes), _) => { bytes },
+                    (Cow::Borrowed(_), _) => unsafe { String::from_utf8_unchecked(bytes) }
+                };
+                
+                item.text = Some(text);
                 item.error = None;
             }
             Err(err) => {
