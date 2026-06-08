@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+//#![windows_subsystem = "windows"]
 
 mod widgets;
 mod analysis;
@@ -14,8 +14,8 @@ mod convert;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use imgui_app::{imgui, platform_init, imgui_init, renderer_init, run};
-use imgui::{Condition, StyleVar, Ui};
+use imgui_app::{platform_init, imgui_init, renderer_init, run};
+use imgui_app::dear_imgui_rs::{Condition, StyleVar, Ui, WindowFlags};
 
 use screens::*;
 use analysis::UnusedAssets;
@@ -39,7 +39,9 @@ enum Screen {
     LevelDetails(level_details::State),
 }
 
+#[derive(Default)]
 enum Task {
+    #[default]
     None,
     SelectLevel,
     OpenLevel(PathBuf),
@@ -57,12 +59,11 @@ fn main() -> Result<()> {
     run(imgui, |ui, ex| {
         let (width, height) = ex.window.size();
         let _style_window_padding = ui.push_style_var(StyleVar::WindowPadding([0.0, 0.0]));
+        let _border = ui.push_style_var(StyleVar::WindowBorderSize(0.0));
         ui.window("Main")
             .position([0.0, 0.0], Condition::Always)
             .size([width as f32, height as f32], Condition::Always)
-            .title_bar(false)
-            .movable(false)
-            .resizable(false)
+            .flags(WindowFlags::NO_TITLE_BAR | WindowFlags::NO_MOVE | WindowFlags::NO_RESIZE)
             .build(|| build_ui(&mut app, ui, ex));
     });
 

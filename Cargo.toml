@@ -8,7 +8,7 @@ anyhow = "1.0.102"
 chardetng = "1.0.0"
 encoding_rs = "0.8.35"
 env_logger = "0.11.10"
-imgui_app = { git = "https://github.com/spindlymist/imgui_app" }
+imgui_app = { git = "https://github.com/spindlymist/imgui_app", branch = "new-imgui-bindings" }
 kira = { version = "0.12.1", default-features = false, features = ["cpal", "ogg", "vorbis"] }
 libks = { git = "https://github.com/spindlymist/libks", features = ["fractional-coords"] }
 libks_ini = { git = "https://github.com/spindlymist/libks" }

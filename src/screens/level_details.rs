@@ -2,8 +2,8 @@ use std::{borrow::Cow, fs::{self, File}, path::{Path, PathBuf}};
 
 use anyhow::Result;
 use chardetng::EncodingDetector;
-use imgui_app::{imgui, Fonts, Textures, Texture, ImguiCursorExt};
-use imgui::{StyleColor, StyleVar, TableFlags, Ui, WindowFlags};
+use imgui_app::{dear_imgui_rs, Fonts, ImguiCursorExt, Textures};
+use dear_imgui_rs::{ChildFlags, FontId, StyleColor, StyleVar, TableFlags, TableOptions, TableSizingPolicy, Ui, WindowFlags};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTag, units::Timestamp}, default::formats::OggReader};
 
@@ -27,7 +27,7 @@ pub struct State {
     #[allow(dead_code)]
     pub level_dir: PathBuf,
     pub level_name: String,
-    pub level_icon: Option<Texture>,
+    pub level_icon: Option<u64>,
     pub tilesets: Vec<AssetListItem>,
     pub gradients: Vec<AssetListItem>,
     pub songs: Vec<AssetListItem>,
@@ -151,7 +151,7 @@ pub struct AssetListItem {
     pub rel_path: PathBuf,
     pub display_name: String,
     pub error: Option<anyhow::Error>,
-    pub image: Option<Texture>,
+    pub texture_id: Option<u64>,
     pub text: Option<String>,
     pub meta: Option<Metadata>,
     pub is_checked: bool,
@@ -212,7 +212,7 @@ impl AssetListItem {
             display_name: file_name,
             rel_path,
             error: None,
-            image: None,
+            texture_id: None,
             text: None,
             meta: None,
             is_checked: false,
@@ -225,13 +225,15 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     ui.move_cursor_down(8.0);
     
     // Level icon
-    if let Some(image) = state.level_icon.as_ref() {
+    if let Some(image) = state.level_icon.as_ref()
+        .and_then(|id| textures.get_texture(*id))
+    {
         const ICON_WIDTH: f32 = 30.0;
         const ICON_HEIGHT: f32 = 30.0;
         
         let mut cursor_pos = ui.cursor_pos();
-        let [text_width, text_height] = ui.calc_text_size(&state.level_name);
-        let [spacing_x, _] = unsafe { ui.style().item_spacing };
+        let [text_width, text_height] = ui.current_font().calc_text_size(ui.current_font_size(), f32::MAX, 0.0, &state.level_name);
+        let [spacing_x, _] = unsafe { ui.style().item_spacing() };
         let [avail_width, _] = ui.content_region_avail();
         let x_offset = f32::round((avail_width - text_width) / 2.0) - spacing_x - ICON_WIDTH;
         ui.move_cursor_right(x_offset);
@@ -243,8 +245,8 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
             .filled(true)
             .build();
         
-        imgui::Image::new(image.texture_id, [ICON_WIDTH, ICON_HEIGHT])
-            .build(ui);
+        dear_imgui_rs::Image::new(ui, image.texture_data.as_ref(), [ICON_WIDTH, ICON_HEIGHT])
+            .build();
         
         let y_offset = f32::round((ICON_HEIGHT - text_height) / 2.0);
         cursor_pos[1] += y_offset;
@@ -255,22 +257,22 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     {
         let _button_color = ui.push_style_color(StyleColor::Button, [0.0, 0.0, 0.0, 0.0]);
         
-        let frame_padding = unsafe { ui.style().frame_padding };
+        let frame_padding = unsafe { ui.style().frame_padding() };
         let cursor_pos = ui.cursor_pos();
-        let width_text = ui.calc_text_size("Go Back")[0];
+        let width_text = ui.current_font().calc_text_size(ui.current_font_size(), f32::MAX, 0.0, "Go Back")[0];
         let width_padding = frame_padding[0] * 2.0;
         let width_avail = ui.content_region_avail()[0];
         ui.move_cursor([width_avail - 8.0 - width_text - width_padding, -frame_padding[1]]);
         
         if ui.button("Go Back") {
-            for image in state.tilesets.iter_mut()
+            for texture_id in state.tilesets.iter_mut()
                 .chain(state.gradients.iter_mut())
                 .chain(state.custom_objects.iter_mut())
                 .chain(state.cutscenes.iter_mut())
                 .chain(state.misc.iter_mut())
-                .filter_map(|asset| asset.image.take())
+                .filter_map(|asset| asset.texture_id.take())
             {
-                textures.delete_texture(image.texture_id);
+                textures.delete_texture(texture_id);
             }
             return Task::SelectLevel;
         }
@@ -350,7 +352,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
     ui.same_line();
     {
         let n_checked = assets.iter().filter(|item| item.is_checked).count();
-        let _disabled = ui.begin_disabled(n_checked == 0);
+        let _disabled = ui.begin_disabled_with_cond(n_checked == 0);
         if ui.button(format!("Delete checked ({})", n_checked)) {
             ui.open_popup(tab.modal_id_multiple());
         }
@@ -362,7 +364,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
     }
     
     const PREVIEW_MIN_WIDTH: f32 = 600.0 + 20.0;
-    let item_spacing_x = unsafe { ui.style() }.item_spacing[0];
+    let item_spacing_x = unsafe { ui.style().item_spacing()[0] };
     let buttons_width = ui.item_rect_max()[0] - cursor_initial_screen_pos[0];
     let left_half_width = f32::floor((full_width - item_spacing_x) * 0.5);
     let right_half_width = full_width - left_half_width;
@@ -385,7 +387,7 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
     let _group_right = ui.begin_group();
     
     {
-        let _disabled = ui.begin_disabled(selected_index.is_none());
+        let _disabled = ui.begin_disabled_with_cond(selected_index.is_none());
         
         if ui.button("Show in Explorer") {
             let _ = std::process::Command::new("explorer.exe")
@@ -408,33 +410,31 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
     {
         let _bg_color = ui.push_style_color(StyleColor::ChildBg, [0.1, 0.1, 0.1, 1.0]);
         let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-        let _preview_window = ui.child_window("Preview")
+        ui.child_window("Preview")
             .size([-1.0, -1.0])
-            .menu_bar(false)
-            .movable(false)
-            .scrollable(true)
-            .flags(WindowFlags::HORIZONTAL_SCROLLBAR | WindowFlags::ALWAYS_USE_WINDOW_PADDING)
-            .begin();
-        
-        if let Some(item) = selected_index
-            .as_ref()
-            .and_then(|i| assets.get_mut(*i))
-        {
-            match item.kind {
-                AssetKind::Image => {
-                    build_preview_image(ui, textures, item);
-                }
-                AssetKind::Audio => {
-                    build_preview_audio(ui, item, &mut state.audio);
-                }
-                AssetKind::Text => {
-                    build_preview_text(ui, item, fonts.mono);
-                }
-                AssetKind::Other => {
-                    ui.text("No preview available.");
+            .flags(WindowFlags::NO_MOVE | WindowFlags::NO_TITLE_BAR | WindowFlags::HORIZONTAL_SCROLLBAR)
+            .child_flags(ChildFlags::ALWAYS_USE_WINDOW_PADDING)
+        .build(ui, || {
+            if let Some(item) = selected_index
+                .as_ref()
+                .and_then(|i| assets.get_mut(*i))
+            {
+                match item.kind {
+                    AssetKind::Image => {
+                        build_preview_image(ui, textures, item);
+                    }
+                    AssetKind::Audio => {
+                        build_preview_audio(ui, item, &mut state.audio);
+                    }
+                    AssetKind::Text => {
+                        build_preview_text(ui, item, fonts.mono);
+                    }
+                    AssetKind::Other => {
+                        ui.text("No preview available.");
+                    }
                 }
             }
-        }
+        });
     }
 }
 
@@ -445,13 +445,13 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
             error_display(ui, err);
             ui.button("Retry")
         }
-        None => item.image.is_none()
+        None => item.texture_id.is_none()
     };
     
     if should_load {
         match textures.create_texture_from_file(&item.abs_path) {
             Ok(val) => {
-                item.image = Some(val);
+                item.texture_id = Some(val);
                 item.error = None;
             }
             Err(err) => {
@@ -460,12 +460,15 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
         };
     }
     
-    if let Some(image) = &item.image {
+    if let Some(image) = item.texture_id.as_ref().and_then(|id| textures.get_texture(*id)) {
         if image.is_downscaled {
             ui.text("Preview is downscaled.");
         }
-        imgui::Image::new(image.texture_id, [image.width, image.height])
-            .build(ui);
+        dear_imgui_rs::Image::new(ui, image.texture_data.as_ref(), [
+                image.texture_data.width() as f32,
+                image.texture_data.height() as f32
+            ])
+            .build();
     }
 }
 
@@ -474,9 +477,11 @@ fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut Audi
         item.meta = Some(metadata_from_file(&item.abs_path).unwrap_or_default());
     }
     
-    if let Some(ref meta) = item.meta {
-        let flags = TableFlags::BORDERS | TableFlags::SIZING_FIXED_FIT;
-        if let Some(_table) = ui.begin_table_with_flags("##Metadata", 2, flags) {
+    if let Some(meta) = &item.meta {
+        let options = TableOptions::new()
+            .flags(TableFlags::BORDERS)
+            .sizing_policy(TableSizingPolicy::FixedFit);
+        if let Some(_table) = ui.begin_table_with_flags("##Metadata", 2, options) {
             ui.table_next_row();
             ui.table_next_column();
             ui.text("Artist");
@@ -536,7 +541,7 @@ fn build_preview_audio(ui: &Ui, item: &mut AssetListItem, audio_state: &mut Audi
     }
 }
 
-fn build_preview_text(ui: &Ui, item: &mut AssetListItem, font: imgui::FontId) {
+fn build_preview_text(ui: &Ui, item: &mut AssetListItem, font: FontId) {
     let should_load = match item.error {
         Some(ref err) => {
             ui.text("An error occurred while loading the preview:");
@@ -592,11 +597,10 @@ fn modal_delete_single(
     let mut did_delete_file = false;
     
     let _modal_padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-    if let Some(_popup) = ui.modal_popup_config(tab.modal_id_single())
-        .movable(false)
-        .resizable(false)
-        .always_auto_resize(true)
-        .begin_popup()
+    
+    if let Some(_modal) = ui.begin_modal_popup_config(tab.modal_id_single())
+        .flags(WindowFlags::NO_MOVE | WindowFlags::NO_RESIZE | WindowFlags::ALWAYS_AUTO_RESIZE)
+        .begin()
     {
         let Some(i) = selected_index else {
             ui.close_current_popup();
@@ -609,8 +613,8 @@ fn modal_delete_single(
         
         if ui.button("Yes, destroy it!") {
             if trash::delete(&item.abs_path).is_ok() {
-                if let Some(ref image) = item.image {
-                    textures.delete_texture(image.texture_id);
+                if let Some(texture_id) = &item.texture_id {
+                    textures.delete_texture(*texture_id);
                 }
                 assets.remove(*i);
                 selected_index.take();
@@ -639,11 +643,9 @@ fn modal_delete_multiple(
     let mut did_delete_files = false;
     
     let _padding = ui.push_style_var(StyleVar::WindowPadding([10.0, 10.0]));
-    if let Some(_popup) = ui.modal_popup_config(tab.modal_id_multiple())
-        .movable(false)
-        .resizable(false)
-        .always_auto_resize(true)
-        .begin_popup()
+    if let Some(_modal) = ui.begin_modal_popup_config(tab.modal_id_multiple())
+        .flags(WindowFlags::NO_MOVE | WindowFlags::NO_RESIZE | WindowFlags::ALWAYS_AUTO_RESIZE)
+        .begin()
     {
         if n_checked < 1 {
             ui.close_current_popup();
@@ -665,8 +667,8 @@ fn modal_delete_multiple(
                 match trash::delete(&item.abs_path) {
                     Ok(_) => {
                         did_delete_files = true;
-                        if let Some(ref image) = item.image {
-                            textures.delete_texture(image.texture_id);
+                        if let Some(texture_id) = &item.texture_id {
+                            textures.delete_texture(*texture_id);
                         }
                         false
                     }

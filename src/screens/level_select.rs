@@ -1,7 +1,6 @@
 use std::{fs, path::Path};
 
-use imgui_app::imgui;
-use imgui::{StyleColor, StyleVar, Ui};
+use imgui_app::dear_imgui_rs::{StyleColor, StyleVar, Ui};
 
 use crate::{SharedState, Task, widgets::{error_display, filtered_list_box}};
 
@@ -61,7 +60,7 @@ pub fn build_ui(shared: &mut SharedState, state: &mut State, ui: &Ui) -> Task {
         let _hint_color_token = ui.push_style_color(StyleColor::TextDisabled, hint_color);
         
         let full_width = ui.content_region_avail()[0] - 8.0;
-        let input_width = full_width * (10.0/12.0) - unsafe { ui.style().item_spacing[0] / 2.0 };
+        let input_width = full_width * (10.0/12.0) - unsafe { ui.style().item_spacing()[0] / 2.0 };
         ui.set_next_item_width(input_width);
         if ui.input_text("##Level filter", &mut state.filter)
             .hint("Filter levels")

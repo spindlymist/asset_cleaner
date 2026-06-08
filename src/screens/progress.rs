@@ -1,8 +1,7 @@
 use std::{path::PathBuf, thread, sync::mpsc};
 
 use anyhow::anyhow;
-use imgui_app::imgui;
-use imgui::Ui;
+use imgui_app::dear_imgui_rs::Ui;
 
 use crate::{SharedState, Task, analysis::{AnalysisStatus, UnusedAssets, list_unused_assets}, widgets::error_display};
 
