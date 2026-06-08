@@ -420,18 +420,10 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
                 .and_then(|i| assets.get_mut(*i))
             {
                 match item.kind {
-                    AssetKind::Image => {
-                        build_preview_image(ui, textures, item);
-                    }
-                    AssetKind::Audio => {
-                        build_preview_audio(ui, item, &mut state.audio);
-                    }
-                    AssetKind::Text => {
-                        build_preview_text(ui, item, fonts.mono);
-                    }
-                    AssetKind::Other => {
-                        ui.text("No preview available.");
-                    }
+                    AssetKind::Image => build_preview_image(ui, textures, item),
+                    AssetKind::Audio => build_preview_audio(ui, item, &mut state.audio),
+                    AssetKind::Text => build_preview_text(ui, item, fonts.mono),
+                    AssetKind::Other => ui.text("No preview available.")
                 }
             }
         });
@@ -439,8 +431,8 @@ fn build_tab(ui: &Ui, state: &mut State, textures: &mut Textures, fonts: &Fonts,
 }
 
 fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListItem) {
-    let should_load = match item.error {
-        Some(ref err) => {
+    let should_load = match &item.error {
+        Some(err) => {
             ui.text("An error occurred while loading the preview:");
             error_display(ui, err);
             ui.button("Retry")
@@ -454,10 +446,9 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
                 item.texture_id = Some(val);
                 item.error = None;
             }
-            Err(err) => {
-                item.error = Some(err.into())
-            }
-        };
+            Err(err) => item.error = Some(err.into())
+        }
+        return; // Don't render this frame to prevent flash
     }
     
     if let Some(image) = item.texture_id.as_ref().and_then(|id| textures.get_texture(*id)) {
