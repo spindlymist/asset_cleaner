@@ -448,7 +448,6 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
             }
             Err(err) => item.error = Some(err.into())
         }
-        return; // Don't render this frame to prevent flash
     }
     
     if let Some(image) = item.texture_id.as_ref().and_then(|id| textures.get_texture(*id)) {

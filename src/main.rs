@@ -121,7 +121,7 @@ fn init_app() -> App {
     }
 }
 
-fn build_ui(app: &mut App, ui: &Ui, ex: imgui_app::Extras) {
+fn build_ui(app: &mut App, ui: &Ui, mut ex: imgui_app::Extras) {
     let _rounding = ui.push_style_var(StyleVar::FrameRounding(2.0));
     
     let task = match &mut app.screen {
@@ -135,7 +135,7 @@ fn build_ui(app: &mut App, ui: &Ui, ex: imgui_app::Extras) {
             progress::build_ui(&mut app.shared, state, ui)
         }
         Screen::LevelDetails(state) => {
-            level_details::build_ui(&mut app.shared, state, ui, ex.textures, ex.fonts)
+            level_details::build_ui(&mut app.shared, state, ui, &mut ex.textures, ex.fonts)
         }
     };
     
@@ -149,7 +149,7 @@ fn build_ui(app: &mut App, ui: &Ui, ex: imgui_app::Extras) {
             app.screen = Screen::Progress(screen_state);
         }
         Task::ShowDetails(path, unused_assets) => {
-            let screen_state = level_details::State::new(path, unused_assets, ex.textures);
+            let screen_state = level_details::State::new(path, unused_assets, &mut ex.textures);
             app.screen = Screen::LevelDetails(screen_state);
         }
         Task::None => {}
