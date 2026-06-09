@@ -643,7 +643,7 @@ fn modal_delete_multiple(
             return false;
         }
         
-        ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural()));
+        ui.text(format!("Are you sure you want to delete {} {}?", n_checked, tab.asset_plural(n_checked)));
         
         if ui.button("Yes, destroy them all!") {
             let previously_selected_path = selected_index
@@ -732,7 +732,22 @@ impl Tab {
         }
     }
     
-    fn asset_plural(&self) -> &'static str {
+    fn asset_singular(&self) -> &'static str {
+        match self {
+            Tab::Tilesets => "tileset",
+            Tab::Gradients => "gradient",
+            Tab::Songs => "song",
+            Tab::Ambiance => "ambiance track",
+            Tab::Sounds => "sound",
+            Tab::CustomObjects => "custom object",
+            Tab::Cutscenes => "cutscene file",
+            Tab::Misc => "file",
+            Tab::Ignored => "file",
+        }
+    }
+    
+    fn asset_plural(&self, count: usize) -> &'static str {
+        if count == 1 { return self.asset_singular() }
         match self {
             Tab::Tilesets => "tilesets",
             Tab::Gradients => "gradients",
