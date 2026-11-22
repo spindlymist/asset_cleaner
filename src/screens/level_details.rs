@@ -3,7 +3,17 @@ use std::{borrow::Cow, fs::{self, File}, path::{Path, PathBuf}};
 use anyhow::Result;
 use chardetng::EncodingDetector;
 use imgui_app::{dear_imgui_rs, Fonts, ImguiCursorExt, Textures};
-use dear_imgui_rs::{ChildFlags, FontId, StyleColor, StyleVar, TableFlags, TableOptions, TableSizingPolicy, Ui, WindowFlags};
+use dear_imgui_rs::{ChildFlags,
+    FontId,
+    StyleColor,
+    StyleVar,
+    TableFlags,
+    TableOptions,
+    TableSizingPolicy,
+    TextureId,
+    Ui,
+    WindowFlags
+};
 use kira::{AudioManager, AudioManagerSettings, Tween, sound::{FromFileError, PlaybackState, streaming::{StreamingSoundData, StreamingSoundHandle}}};
 use symphonia::{core::{formats::FormatReader, io::MediaSourceStream, meta::StandardTag, units::Timestamp}, default::formats::OggReader};
 
@@ -27,7 +37,7 @@ pub struct State {
     #[allow(dead_code)]
     pub level_dir: PathBuf,
     pub level_name: String,
-    pub level_icon: Option<u64>,
+    pub level_icon: Option<TextureId>,
     pub tilesets: Vec<AssetListItem>,
     pub gradients: Vec<AssetListItem>,
     pub songs: Vec<AssetListItem>,
@@ -90,7 +100,7 @@ impl State {
             duration: 0.0,
         };
         
-        let level_icon = textures.create_texture_from_file(&level_dir.join("Icon.png"))
+        let level_icon = textures.create_texture_from_file(&level_dir.join("Icon.png"), false)
             .map(Option::Some)
             .unwrap_or(None);
         
@@ -151,7 +161,7 @@ pub struct AssetListItem {
     pub rel_path: PathBuf,
     pub display_name: String,
     pub error: Option<anyhow::Error>,
-    pub texture_id: Option<u64>,
+    pub texture_id: Option<TextureId>,
     pub text: Option<String>,
     pub meta: Option<Metadata>,
     pub is_checked: bool,
@@ -226,13 +236,13 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
     
     // Level icon
     if let Some(image) = state.level_icon.as_ref()
-        .and_then(|id| textures.get_texture(*id))
+        .and_then(|id| textures.get_texture_info(*id))
     {
         const ICON_WIDTH: f32 = 30.0;
         const ICON_HEIGHT: f32 = 30.0;
         
         let mut cursor_pos = ui.cursor_pos();
-        let [text_width, text_height] = ui.current_font().calc_text_size(ui.current_font_size(), f32::MAX, 0.0, &state.level_name);
+        let [text_width, text_height] = ui.calc_text_size(&state.level_name);
         let [spacing_x, _] = unsafe { ui.style().item_spacing() };
         let [avail_width, _] = ui.content_region_avail();
         let x_offset = f32::round((avail_width - text_width) / 2.0) - spacing_x - ICON_WIDTH;
@@ -245,7 +255,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
             .filled(true)
             .build();
         
-        dear_imgui_rs::Image::new(ui, image.texture_data.as_ref(), [ICON_WIDTH, ICON_HEIGHT])
+        dear_imgui_rs::Image::new(ui, image, [ICON_WIDTH, ICON_HEIGHT])
             .build();
         
         let y_offset = f32::round((ICON_HEIGHT - text_height) / 2.0);
@@ -259,7 +269,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
         
         let frame_padding = unsafe { ui.style().frame_padding() };
         let cursor_pos = ui.cursor_pos();
-        let width_text = ui.current_font().calc_text_size(ui.current_font_size(), f32::MAX, 0.0, "Go Back")[0];
+        let width_text = ui.calc_text_size("Go Back")[0];
         let width_padding = frame_padding[0] * 2.0;
         let width_avail = ui.content_region_avail()[0];
         ui.move_cursor([width_avail - 8.0 - width_text - width_padding, -frame_padding[1]]);
@@ -272,7 +282,7 @@ pub fn build_ui(_shared: &mut SharedState, state: &mut State, ui: &Ui, textures:
                 .chain(state.misc.iter_mut())
                 .filter_map(|asset| asset.texture_id.take())
             {
-                textures.delete_texture(texture_id);
+                textures.destroy_texture(texture_id);
             }
             return Task::SelectLevel;
         }
@@ -441,7 +451,7 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
     };
     
     if should_load {
-        match textures.create_texture_from_file(&item.abs_path) {
+        match textures.create_texture_from_file(&item.abs_path, false) {
             Ok(val) => {
                 item.texture_id = Some(val);
                 item.error = None;
@@ -450,14 +460,11 @@ fn build_preview_image(ui: &Ui, textures: &mut Textures, item: &mut AssetListIte
         }
     }
     
-    if let Some(image) = item.texture_id.as_ref().and_then(|id| textures.get_texture(*id)) {
+    if let Some(image) = item.texture_id.as_ref().and_then(|id| textures.get_texture_info(*id)) {
         if image.is_downscaled {
             ui.text("Preview is downscaled.");
         }
-        dear_imgui_rs::Image::new(ui, image.texture_data.as_ref(), [
-                image.texture_data.width() as f32,
-                image.texture_data.height() as f32
-            ])
+        dear_imgui_rs::Image::new(ui, image, [image.width(), image.height()])
             .build();
     }
 }
@@ -604,7 +611,7 @@ fn modal_delete_single(
         if ui.button("Yes, destroy it!") {
             if trash::delete(&item.abs_path).is_ok() {
                 if let Some(texture_id) = &item.texture_id {
-                    textures.delete_texture(*texture_id);
+                    textures.destroy_texture(*texture_id);
                 }
                 assets.remove(*i);
                 selected_index.take();
@@ -658,7 +665,7 @@ fn modal_delete_multiple(
                     Ok(_) => {
                         did_delete_files = true;
                         if let Some(texture_id) = &item.texture_id {
-                            textures.delete_texture(*texture_id);
+                            textures.destroy_texture(*texture_id);
                         }
                         false
                     }

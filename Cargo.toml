@@ -8,7 +8,7 @@ anyhow = "1.0.102"
 chardetng = "1.0.0"
 encoding_rs = "0.8.35"
 env_logger = "0.11.10"
-imgui_app = { git = "https://github.com/spindlymist/imgui_app", branch = "new-imgui-bindings" }
+imgui_app = { git = "https://github.com/spindlymist/imgui_app" }
 kira = { version = "0.12.1", default-features = false, features = ["cpal", "ogg", "vorbis"] }
 libks = { git = "https://github.com/spindlymist/libks", features = ["fractional-coords"] }
 libks_ini = { git = "https://github.com/spindlymist/libks" }
@@ -16,7 +16,9 @@ mint = "0.5.9"
 natord = "1.0.9"
 regex = { version = "1.12.3", features = ["use_std"] }
 rfd = { version = "0.17.2", default-features = false, features = ["gtk3"] }
+serde = { version = "1.0.229", features = ["derive"] }
 symphonia = { version = "0.6.0", default-features = false, features = ["ogg", "vorbis"] }
+toml = "1.2.2"
 trash = "5.2.6"
 walkdir = "2.5.0"
 

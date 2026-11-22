@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, ops::RangeBounds, path::{Path, PathBu
 
 use anyhow::{Context, Result};
 use libks::map_bin::{LayerData, ScreenData};
-use libks_ini::Ini;
+use libks_ini::edit::Ini;
 use walkdir::WalkDir;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -308,7 +308,7 @@ fn check_co_usage(screens: &[ScreenData], ini: &Ini) -> CustomObjectsUsed {
     }
     
     // Find COs referenced by triggers
-    for section in ini.iter_virtual_sections() {
+    for section in ini.iter_sections() {
         let Some(WorldIniSection::Screen(..)) = interpret_world_ini_section(section.key())
             else { continue };
         
@@ -408,7 +408,7 @@ fn analyze_ini(ini: &Ini, world_path: &Path, custom_objects_used: &CustomObjects
     let mut ambiance = HashSet::new();
     let mut savegames = HashSet::new();
     
-    for section in ini.iter_virtual_sections() {
+    for section in ini.iter_sections() {
         let Some(section_type) = interpret_world_ini_section(section.key()) else {
             continue;
         };
@@ -483,7 +483,7 @@ fn analyze_ini(ini: &Ini, world_path: &Path, custom_objects_used: &CustomObjects
                 }
             }
             WorldIniSection::CutsceneMusic => {
-                for (_, value) in section.iter() {
+                for (_, value) in section.iter_props() {
                     match parse_cutscene_music_index(value) {
                         CutsceneMusic::Song(s) => songs.insert(s),
                         CutsceneMusic::Ambi(s) => ambiance.insert(s),
@@ -677,7 +677,7 @@ enum WorldIniSection {
     CutsceneMusic,
     CustomCharacter,
     CustomObject(u8, u8),
-    Screen(f32, f32),
+    Screen(f64, f64),
 }
 
 fn interpret_world_ini_section(key: &str) -> Option<WorldIniSection> {

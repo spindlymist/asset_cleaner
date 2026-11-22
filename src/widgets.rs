@@ -1,14 +1,13 @@
 use std::path::PathBuf;
 
-use imgui_app::{ImguiCursorExt, dear_imgui_rs::{self, ChildFlags}};
-use dear_imgui_rs::{Key, MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
+use imgui_app::dear_imgui_rs;
+use dear_imgui_rs::{ChildFlags, Key, MouseButton, StyleColor, StyleVar, Ui, WindowFlags};
 
 pub fn text_centered<T: AsRef<str>>(ui: &Ui, text: T) {
     let [width_avail, _] = ui.content_region_avail();
-    let [width_text, _] = ui.current_font()
-        .calc_text_size(ui.current_font_size(), f32::MAX, 0.0, text.as_ref());
+    let [width_text, _] = ui.calc_text_size(text.as_ref());
     let x = (width_avail - width_text) / 2.0;
-    ui.set_cursor_x(x);
+    ui.set_cursor_pos_x(x);
     ui.text(text);
 }
 
@@ -152,9 +151,7 @@ where
         let _frame_padding = ui.push_style_var(StyleVar::FramePadding([0.0, 0.0]));
         
         let max_item_width = items.iter_mut()
-            .map(|item| {
-                ui.current_font().calc_text_size(ui.current_font_size(), f32::MAX, 0.0, item.label())[0]
-            })
+            .map(|item| ui.calc_text_size(item.label())[0])
             .fold(f32::NEG_INFINITY, f32::max);
         
         let content_width = ui.content_region_avail()[0];

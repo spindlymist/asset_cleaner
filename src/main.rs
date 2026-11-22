@@ -51,7 +51,7 @@ enum Task {
 fn main() -> Result<()> {
     env_logger::init();
 
-    let platform = platform_init("Asset Cleaner", (1024, 768))?;
+    let platform = platform_init("Asset Cleaner", (1024, 768), false)?;
     let renderer = renderer_init(&platform.window, platform.window.size())?;
     let imgui = imgui_init(platform, renderer);
     
@@ -65,6 +65,8 @@ fn main() -> Result<()> {
             .size([width as f32, height as f32], Condition::Always)
             .flags(WindowFlags::NO_TITLE_BAR | WindowFlags::NO_MOVE | WindowFlags::NO_RESIZE)
             .build(|| build_ui(&mut app, ui, ex));
+        
+        imgui_app::Task::None
     });
 
     Ok(())
